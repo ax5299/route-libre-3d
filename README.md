@@ -63,8 +63,9 @@ Dépôt GitHub : https://github.com/ax5299/route-libre-3d
 Le projet Vercel `route-libre-3d` utilise Node.js 22, `npm ci`, puis
 `npm run build`. Le dossier publié est `dist/`.
 
-Une fois le dépôt connecté à Vercel, les changements poussés sur `main`
-sont déployés automatiquement.
+Le dépôt est connecté à Vercel : les changements poussés sur `main` sont
+déployés automatiquement. Après avoir vérifié le jeu, crée un commit puis
+exécute `git push`. Il est inutile de relancer la CLI Vercel pour chaque mise à jour.
 
 Les réglages et records sont enregistrés dans le navigateur de chaque joueur.
 
@@ -72,6 +73,6 @@ Les réglages et records sont enregistrés dans le navigateur de chaque joueur.
 
 - Dépôt public et site Vercel publiés.
 - Build et test navigateur sur le site public : 24/24 contrôles, aucune erreur console.
-- Liaison automatique GitHub → Vercel en attente de l’autorisation du dépôt
-  `ax5299/route-libre-3d` dans l’application GitHub Vercel.
+- Application GitHub Vercel autorisée sur `ax5299/route-libre-3d` ;
+  liaison du projet établie avec `main` comme branche de production.
 - Les deux projets Piscari existants restent indépendants de ce projet.
