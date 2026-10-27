@@ -1,5 +1,7 @@
 # Route Libre 3D
 
+**Jouer : https://route-libre-3d.vercel.app/**
+
 Prototype de conduite arcade en 3D dans le navigateur (Babylon.js + Vite + TypeScript).
 
 ## Lancer le jeu
@@ -65,3 +67,11 @@ Une fois le dépôt connecté à Vercel, les changements poussés sur `main`
 sont déployés automatiquement.
 
 Les réglages et records sont enregistrés dans le navigateur de chaque joueur.
+
+### État de publication — 27 octobre 2026
+
+- Dépôt public et site Vercel publiés.
+- Build et test navigateur sur le site public : 24/24 contrôles, aucune erreur console.
+- Liaison automatique GitHub → Vercel en attente de l’autorisation du dépôt
+  `ax5299/route-libre-3d` dans l’application GitHub Vercel.
+- Les deux projets Piscari existants restent indépendants de ce projet.
