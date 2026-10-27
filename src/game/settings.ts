@@ -37,13 +37,13 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  circuit: "cretes",
-  steeringSensitivity: 0.8,
+  circuit: "villeeneuve",
+  steeringSensitivity: 0.25,
   deadzone: 0.15,
   cameraFirmness: 1,
-  trafficCount: 6,
+  trafficCount: 24,
   potholesLevel: 4,
-  frogCount: 6,
+  frogCount: 24,
   volume: 0.6,
   muted: false,
   shadows: true,
@@ -81,7 +81,10 @@ const bool = (value: unknown, fallback: boolean): boolean =>
 export function loadSettings(): Settings {
   const raw = store.read<Partial<Settings>>(SETTINGS_KEY, {});
   return {
-    circuit: raw.circuit === "villeeneuve" ? "villeeneuve" : "cretes",
+    circuit:
+      raw.circuit === "cretes" || raw.circuit === "villeeneuve"
+        ? raw.circuit
+        : DEFAULT_SETTINGS.circuit,
     steeringSensitivity: num(raw.steeringSensitivity, DEFAULT_SETTINGS.steeringSensitivity, 0.1, 2),
     deadzone: num(raw.deadzone, DEFAULT_SETTINGS.deadzone, 0, 0.4),
     cameraFirmness: num(raw.cameraFirmness, DEFAULT_SETTINGS.cameraFirmness, 0.4, 2),
