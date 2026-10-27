@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta
+      name="description"
+      content="Route Libre 3D — prototype de conduite arcade en 3D dans le navigateur (Babylon.js)."
+    />
+    <meta name="theme-color" content="#0f1826" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%230f1826'/%3E%3Ccircle cx='8' cy='8' r='4' fill='%23ff6b2c'/%3E%3C/svg%3E" />
+    <title>Route Libre 3D</title>
+    <!--
+      Garde-fou de démarrage. Volontairement un script CLASSIQUE (non module) : il
+      s'exécute même quand le module ES du jeu ne parvient pas à charger.
+      Double-cliquer sur index.html ouvre la page en file://, où le navigateur
+      refuse les modules ES (politique CORS, origine « null ») : main.ts ne tourne
+      pas, le CSS injecté par le JS non plus, et l'écran reste figé sur
+      « Préparation du circuit… ». On affiche donc la marche à suivre au lieu de
+      laisser le visiteur devant une page sans style.
+    -->
+    <script>
+      (function () {
+        var STYLE = [
+          "#boot{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;padding:28px;",
+          "background:#0f1826;color:#f4f1e8;font:16px/1.65 'Segoe UI',system-ui,sans-serif;",
+          "letter-spacing:normal;text-transform:none;text-align:center}",
+          "#boot h2{margin:0;font-size:21px;color:#ffb347}",
+          "#boot .b{display:grid;gap:14px;justify-items:center;max-width:46em}",
+          "#boot p{margin:0;color:#b3c2d1}",
+          "#boot code{font-family:'Cascadia Mono',Consolas,monospace;font-size:15px;color:#ffb347;",
+          'background:rgba(255,255,255,.09);border-radius:6px;padding:2px 7px;user-select:all}',
+        ].join("");
+
+        var HELP_FILE =
+          "<div class=\"b\">" +
+          "<h2>Ouvre le jeu à l’adresse http://127.0.0.1:5173/</h2>" +
+          "<p>Cette page a été ouverte en local (<code>file://</code>) : le navigateur y bloque" +
+          " les modules JavaScript, le jeu ne peut donc pas démarrer.</p>" +
+          "<p>Dans le dossier du projet, lance <code>npm run dev</code> puis ouvre" +
+          " <code>http://127.0.0.1:5173/</code>.</p>" +
+          "<p>Après <code>npm run build</code>, le paquet se sert avec <code>npm run preview</code>" +
+          " (<code>http://127.0.0.1:4173/</code>), jamais par double-clic.</p>" +
+          "</div>";
+
+        var HELP_STALL =
+          "<div class=\"b\">" +
+          "<h2>Le module du jeu ne s’est pas chargé</h2>" +
+          "<p>Attendu depuis plus de 20 s. Relance <code>npm run dev</code>, force le rechargement" +
+          " avec <code>Ctrl&nbsp;+&nbsp;Maj&nbsp;+&nbsp;R</code> (cache Vite périmé), puis consulte la" +
+          " console avec <code>F12</code> et le terminal de Vite.</p>" +
+          "</div>";
+
+        function show(html) {
+          var boot = document.getElementById("boot");
+          if (!boot) return;
+          if (!document.getElementById("boot-guard")) {
+            var style = document.createElement("style");
+            style.id = "boot-guard";
+            style.textContent = STYLE;
+            document.head.appendChild(style);
+          }
+          boot.hidden = false;
+          boot.classList.add("alert");
+          boot.innerHTML = html;
+        }
+
+        /** Un démarrage simplement lent ne doit pas laisser un faux message à l’écran. */
+        function standDownWhenBooted() {
+          var timer = window.setInterval(function () {
+            var boot = document.getElementById("boot");
+            if (!window.game && boot && !boot.hidden) return;
+            window.clearInterval(timer);
+            var guard = document.getElementById("boot-guard");
+            if (guard) guard.remove();
+            if (boot) boot.classList.remove("alert");
+          }, 400);
+          window.setTimeout(function () {
+            window.clearInterval(timer);
+          }, 60000);
+        }
+
+        function whenReady(fn) {
+          if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", fn, { once: true });
+          } else {
+            fn();
+          }
+        }
+
+        if (location.protocol === "file:") {
+          whenReady(function () {
+            show(HELP_FILE);
+          });
+          return;
+        }
+
+        // En http aussi le module peut échouer (404, service worker ou cache Vite
+        // périmé) : même principe, on prévient au lieu de rester muet.
+        window.addEventListener("load", function () {
+          window.setTimeout(function () {
+            var boot = document.getElementById("boot");
+            if (window.game || !boot || boot.hidden) return;
+            show(HELP_STALL);
+            standDownWhenBooted();
+          }, 20000);
+        });
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="game">
+      <canvas id="renderCanvas" tabindex="0" aria-label="Vue 3D du circuit"></canvas>
+
+      <!-- ============================ HUD ============================ -->
+      <div id="hud" class="hud" hidden>
+        <div class="hud-top">
+          <div class="chip">
+            <span class="chip-label">Chrono du tour</span>
+            <span id="hud-time" class="chip-value">0:00.00</span>
+          </div>
+          <div class="chip">
+            <span class="chip-label">Tour</span>
+            <span id="hud-lap" class="chip-value">1 / 3</span>
+          </div>
+          <div class="chip chip-best">
+            <span class="chip-label">Meilleur tour</span>
+            <span id="hud-best" class="chip-value">—</span>
+          </div>
+          <div class="chip">
+            <span class="chip-label">Total</span>
+            <span id="hud-total" class="chip-value">0:00.00</span>
+          </div>
+        </div>
+
+        <div class="hud-speed">
+          <span id="hud-speed" class="speed-value">0</span>
+          <span class="speed-unit">km/h</span>
+        </div>
+
+        <div id="hud-toast" class="hud-toast" hidden></div>
+        <div id="hud-wrongway" class="hud-warn" hidden>À l’envers&nbsp;! Fais demi-tour.</div>
+        <div id="hud-offtrack" class="hud-off" hidden>Hors piste&nbsp;: la terre accroche.</div>
+        <p class="hud-hint">Échap&nbsp;: pause · C&nbsp;: caméra · R&nbsp;: remettre sur la piste</p>
+      </div>
+
+      <!-- ======================= Diagnostic ======================= -->
+      <div id="diag" class="diag" hidden>
+        <div class="diag-title">Mode diagnostic</div>
+        <div class="diag-grid">
+          <span>FPS</span><b id="d-fps">—</b>
+          <span>Pas physique</span><b id="d-steps">—</b>
+          <span>Manette</span><b id="d-pad">aucune</b>
+          <span>Axe X</span><b id="d-ax">—</b>
+          <span>Axe Y</span><b id="d-ay">—</b>
+          <span>RT (gaz)</span><b id="d-rt">—</b>
+          <span>LT (frein)</span><b id="d-lt">—</b>
+          <span>Boutons</span><b id="d-btns">—</b>
+          <span>Vitesse</span><b id="d-spd">—</b>
+          <span>Sol</span><b id="d-surf">—</b>
+          <span>Latéral</span><b id="d-lat">—</b>
+          <span>Avancement</span><b id="d-s">—</b>
+          <span>Checkpoints</span><b id="d-cp">—</b>
+          <span>Caméra</span><b id="d-cam">—</b>
+        </div>
+        <div class="diag-bar"><i id="d-bar-ax"></i></div>
+        <div class="diag-bar"><i id="d-bar-rt"></i></div>
+      </div>
+
+      <!-- ==================== Compte à rebours ==================== -->
+      <div id="countdown" class="countdown" hidden></div>
+
+      <!-- ========================= Menus ========================= -->
+      <section id="screen-home" class="screen">
+        <header class="brand">
+          <h1>Route&nbsp;Libre <span>3D</span></h1>
+          <p class="tagline" id="tagline-track">Contre-la-montre · Circuit des Crêtes</p>
+        </header>
+        <nav class="menu" aria-label="Menu principal">
+          <button class="btn primary" data-action="play">Jouer</button>
+          <button class="btn" data-action="commands">Commandes</button>
+          <button class="btn" data-action="settings">Réglages</button>
+        </nav>
+        <p id="home-record" class="record-banner"></p>
+        <p class="foot-note">Aucune manette n’est obligatoire&nbsp;: le clavier fonctionne aussi.</p>
+      </section>
+
+      <section id="screen-commands" class="screen sub" hidden>
+        <h2>Commandes</h2>
+        <div class="cols">
+          <article class="card">
+            <h3>Manette Xbox</h3>
+            <ul class="keys">
+              <li><span class="k">Stick gauche</span><span class="d">Direction analogique</span></li>
+              <li><span class="k">RT</span><span class="d">Accélérateur analogique</span></li>
+              <li><span class="k">LT</span><span class="d">Frein · marche arrière près de l’arrêt</span></li>
+              <li><span class="k">A</span><span class="d">Frein à main</span></li>
+              <li><span class="k">X</span><span class="d">Replacer la voiture sur la piste</span></li>
+              <li><span class="k">Y</span><span class="d">Changer de caméra</span></li>
+              <li><span class="k">Menu</span><span class="d">Pause / reprise</span></li>
+              <li>
+                <span class="k">Croix / stick</span>
+                <span class="d">Naviguer dans les menus · A ou Menu pour valider</span>
+              </li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>Clavier</h3>
+            <ul class="keys">
+              <li><span class="k">↑ / W</span><span class="d">Accélérer</span></li>
+              <li><span class="k">↓ / S</span><span class="d">Freiner puis marche arrière</span></li>
+              <li><span class="k">← → / A D</span><span class="d">Diriger</span></li>
+              <li><span class="k">Espace</span><span class="d">Frein à main</span></li>
+              <li><span class="k">C</span><span class="d">Changer de caméra</span></li>
+              <li><span class="k">R</span><span class="d">Remettre sur la piste</span></li>
+              <li><span class="k">Échap</span><span class="d">Pause / retour</span></li>
+              <li><span class="k">Entrée</span><span class="d">Valider dans les menus</span></li>
+            </ul>
+          </article>
+        </div>
+        <p class="hint">Seules ces commandes sont actives dans cette version.</p>
+        <nav class="menu">
+          <button class="btn" data-action="back">Retour</button>
+        </nav>
+      </section>
+
+      <section id="screen-settings" class="screen sub" hidden>
+        <h2>Réglages</h2>
+        <div class="settings">
+          <div class="field">
+            <span class="field-label">Circuit (rechargement au changement)</span>
+            <div class="toggles">
+              <label class="toggle">
+                <input type="radio" name="set-circuit" value="cretes" />
+                <span>Circuit des Crêtes</span>
+              </label>
+              <label class="toggle">
+                <input type="radio" name="set-circuit" value="villeeneuve" />
+                <span>Gilles-Villeneuve · Montréal</span>
+              </label>
+            </div>
+          </div>
+          <label class="field">
+            <span class="field-label">Sensibilité de la direction <output id="out-sens">1.00</output></span>
+            <input id="set-sens" type="range" min="0.1" max="2" step="0.05" />
+          </label>
+          <label class="field">
+            <span class="field-label">Zone morte du stick <output id="out-dz">0.15</output></span>
+            <input id="set-dz" type="range" min="0" max="0.4" step="0.01" />
+          </label>
+          <label class="field">
+            <span class="field-label">Fermeté de la caméra <output id="out-cam">1.00</output></span>
+            <input id="set-cam" type="range" min="0.4" max="2" step="0.05" />
+          </label>
+          <label class="field">
+            <span class="field-label">Voitures de trafic <output id="out-traffic">6</output></span>
+            <input id="set-traffic" type="range" min="0" max="24" step="1" />
+          </label>
+          <label class="field">
+            <span class="field-label">Nids de poule (aucun → beaucoup) <output id="out-holes">Modéré</output></span>
+            <input id="set-holes" type="range" min="0" max="10" step="1" />
+          </label>
+          <label class="field">
+            <span class="field-label">Grenouilles sur la piste <output id="out-frogs">6</output></span>
+            <input id="set-frogs" type="range" min="0" max="24" step="1" />
+          </label>
+          <label class="field">
+            <span class="field-label">Volume du moteur <output id="out-vol">60</output></span>
+            <input id="set-vol" type="range" min="0" max="100" step="1" />
+          </label>
+          <div class="toggles">
+            <label class="toggle"><input id="set-mute" type="checkbox" /><span>Son coupé</span></label>
+            <label class="toggle"><input id="set-shadows" type="checkbox" /><span>Ombres portées</span></label>
+            <label class="toggle"><input id="set-diag" type="checkbox" /><span>Mode diagnostic</span></label>
+          </div>
+        </div>
+        <nav class="menu row">
+          <button class="btn ghost" data-action="reset-settings">Valeurs par défaut</button>
+          <button class="btn ghost danger" data-action="reset-records">Effacer les records</button>
+          <button class="btn" data-action="back">Retour</button>
+        </nav>
+      </section>
+
+      <section id="screen-pause" class="screen" hidden>
+        <header class="brand">
+          <h1 class="small">Pause</h1>
+          <p class="tagline" id="pause-sub">Course en cours</p>
+        </header>
+        <nav class="menu">
+          <button class="btn primary" data-action="resume">Reprendre</button>
+          <button class="btn" data-action="restart">Recommencer</button>
+          <button class="btn" data-action="commands">Commandes</button>
+          <button class="btn" data-action="settings">Réglages</button>
+          <button class="btn ghost" data-action="quit">Menu principal</button>
+        </nav>
+      </section>
+
+      <section id="screen-finish" class="screen" hidden>
+        <header class="brand">
+          <h1 class="small">Course terminée</h1>
+          <p class="tagline" id="finish-summary"></p>
+        </header>
+        <ul id="finish-laps" class="laps"></ul>
+        <nav class="menu">
+          <button class="btn primary" data-action="restart">Rejouer</button>
+          <button class="btn ghost" data-action="quit">Menu principal</button>
+        </nav>
+      </section>
+
+      <div id="pad-prompt" class="pad-prompt" hidden>Appuie sur un bouton de la manette</div>
+      <div id="boot" class="boot">Préparation du circuit…</div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

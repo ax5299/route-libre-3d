@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.vite/
+*.log
+.DS_Store
+.vercel
+*.tsbuildinfo
+.kilo/
+.smoke/
+_sample.png
+.env
+.env.*
+!.env.example

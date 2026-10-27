@@ -1,0 +1,27 @@
+{
+  "name": "route-libre-3d",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Route Libre 3D - prototype de conduite arcade en 3D (Babylon.js + Vite)",
+  "scripts": {
+    "start": "vite",
+    "dev": "vite",
+    "build": "npm run typecheck && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "smoke": "node scripts/smoke.mjs",
+    "steer": "node scripts/_debug/steer-check.mjs"
+  },
+  "dependencies": {
+    "@babylonjs/core": "^8.56.2"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.64.1",
+    "typescript": "~7.0.2",
+    "vite": "^8.3.5"
+  },
+  "engines": {
+    "node": "22.x"
+  }
+}
