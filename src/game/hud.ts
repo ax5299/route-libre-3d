@@ -59,6 +59,7 @@ const NODE_IDS = [
   "lap",
   "best",
   "total",
+  "circuit",
   "toast",
   "wrong",
   "off",
@@ -97,6 +98,7 @@ const DOM_IDS: Record<NodeId, string> = {
   lap: "hud-lap",
   best: "hud-best",
   total: "hud-total",
+  circuit: "hud-circuit",
   toast: "hud-toast",
   wrong: "hud-wrongway",
   off: "hud-offtrack",
@@ -290,6 +292,7 @@ export class Hud {
     for (const radio of this.radios.circuit) radio.checked = radio.value === settings.circuit;
     const tagline = document.getElementById("tagline-track");
     if (tagline) tagline.textContent = `Contre-la-montre · ${CIRCUIT_LABELS[settings.circuit]}`;
+    if (this.n.circuit) this.n.circuit.textContent = CIRCUIT_LABELS[settings.circuit].split(" · ")[0];
     this.syncOutputs();
     this.updateDiagnosticVisibility();
   }

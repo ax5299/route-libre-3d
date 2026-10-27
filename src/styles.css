@@ -102,6 +102,14 @@ body {
   color: var(--accent-2);
 }
 
+.chip-circuit {
+  min-width: 150px;
+}
+
+.chip-circuit .chip-value {
+  font-size: 16px;
+}
+
 .hud-speed {
   grid-area: speed;
   justify-self: end;
@@ -625,6 +633,9 @@ input[type="range"]::-moz-range-thumb {
   .hud-top .chip {
     min-width: 92px;
     padding: 5px 10px;
+  }
+  .chip-circuit .chip-value {
+    font-size: 13px;
   }
   .chip-value {
     font-size: 17px;

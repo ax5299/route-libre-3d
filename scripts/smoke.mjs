@@ -119,6 +119,11 @@ try {
 }
 await visible("#hud").then((state) => check("HUD de course visible", "visible", state));
 check("phase de course", "racing", await fromGame("race.phase"));
+check(
+  "circuit affiché en haut du HUD",
+  (v) => typeof v === "string" && v.trim().length > 1 && v !== "—",
+  await page.textContent("#hud-circuit"),
+);
 await page.waitForTimeout(1000);
 await visible("#countdown").then((state) => check("compte à rebours masqué après GO", "hidden", state));
 
