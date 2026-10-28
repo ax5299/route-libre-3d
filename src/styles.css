@@ -659,3 +659,13 @@ input[type="range"]::-moz-range-thumb {
     grid-auto-flow: row;
   }
 }
+
+/* Assistant manette : lisible sur portable et sans débordement des identifiants USB. */
+.pad-config { width: min(760px, 100%); text-align: left; }
+.pad-config select { width: 100%; padding: 10px; color: #172536; background: #fff; border-radius: 8px; }
+.pad-config p { overflow-wrap: anywhere; line-height: 1.5; }
+.pad-config pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.6; }
+.pad-config .menu.row { display: flex; flex-wrap: wrap; margin: 16px 0; }
+.pad-config .btn { font-size: 14px; }
+.pad-config button[hidden] { display: none; }
+.pad-config button:disabled { opacity: .5; cursor: default; }

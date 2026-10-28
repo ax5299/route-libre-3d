@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "smoke": "node scripts/smoke.mjs",
-    "steer": "node scripts/_debug/steer-check.mjs"
+    "steer": "node scripts/_debug/steer-check.mjs",
+    "test:gamepad": "node scripts/gamepad-check.mjs"
   },
   "dependencies": {
     "@babylonjs/core": "^8.56.2"

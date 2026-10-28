@@ -185,6 +185,7 @@
           <button class="btn primary" data-action="play">Jouer</button>
           <button class="btn" data-action="commands">Commandes</button>
           <button class="btn" data-action="settings">Réglages</button>
+          <button class="btn" data-action="controller">Configurer ma manette</button>
         </nav>
         <p id="home-record" class="record-banner"></p>
         <p class="foot-note">Aucune manette n’est obligatoire&nbsp;: le clavier fonctionne aussi.</p>
@@ -199,13 +200,13 @@
               <li><span class="k">Stick gauche</span><span class="d">Direction analogique</span></li>
               <li><span class="k">RT</span><span class="d">Accélérateur analogique</span></li>
               <li><span class="k">LT</span><span class="d">Frein · marche arrière près de l’arrêt</span></li>
-              <li><span class="k">A</span><span class="d">Frein à main</span></li>
-              <li><span class="k">X</span><span class="d">Replacer la voiture sur la piste</span></li>
+              <li><span class="k">X</span><span class="d">Frein à main</span></li>
+              <li><span class="k">B</span><span class="d">Replacer la voiture sur la piste</span></li>
               <li><span class="k">Y</span><span class="d">Changer de caméra</span></li>
               <li><span class="k">Menu</span><span class="d">Pause / reprise</span></li>
               <li>
                 <span class="k">Croix / stick</span>
-                <span class="d">Naviguer dans les menus · A ou Menu pour valider</span>
+                <span class="d">Naviguer dans les menus · A pour valider</span>
               </li>
             </ul>
           </article>
@@ -223,10 +224,34 @@
             </ul>
           </article>
         </div>
-        <p class="hint">Seules ces commandes sont actives dans cette version.</p>
+        <p class="hint">Manette générique : utilise « Configurer ma manette » dans le menu principal ou en pause. Les profils sont conservés dans ce navigateur.</p>
         <nav class="menu">
           <button class="btn" data-action="back">Retour</button>
         </nav>
+      </section>
+
+      <section id="screen-controller" class="screen sub" hidden>
+        <h2>Configurer ma manette</h2>
+        <div class="pad-config card">
+          <label for="pad-select">Manette à utiliser</label>
+          <select id="pad-select" aria-label="Manette à utiliser"></select>
+          <p id="pad-status" role="status" aria-live="polite"></p>
+          <p id="pad-instruction" aria-live="polite"></p>
+          <div class="menu row">
+            <button id="pad-start" class="btn primary">Configurer ma manette</button>
+            <button id="pad-arm" class="btn primary" hidden>Détecter la commande</button>
+            <button id="pad-skip" class="btn" hidden>Ignorer cette commande</button>
+            <button id="pad-save" class="btn primary" hidden>Enregistrer la configuration</button>
+          </div>
+          <pre id="pad-summary" aria-label="Commandes configurées"></pre>
+          <details open>
+            <summary>Signaux reçus en direct</summary>
+            <pre id="pad-live"></pre>
+          </details>
+          <p class="hint">Si aucun axe ne bouge : vérifie le mode MODE / ANALOG / XInput de la manette. Un profil ne peut pas récupérer un signal absent du navigateur. Tu peux choisir la croix directionnelle pour tourner.</p>
+          <button id="pad-reset" class="btn ghost">Revenir à la configuration automatique</button>
+        </div>
+        <nav class="menu"><button class="btn" data-action="back">Retour</button></nav>
       </section>
 
       <section id="screen-settings" class="screen sub" hidden>
@@ -296,6 +321,7 @@
           <button class="btn" data-action="restart">Recommencer</button>
           <button class="btn" data-action="commands">Commandes</button>
           <button class="btn" data-action="settings">Réglages</button>
+          <button class="btn" data-action="controller">Configurer ma manette</button>
           <button class="btn ghost" data-action="quit">Menu principal</button>
         </nav>
       </section>

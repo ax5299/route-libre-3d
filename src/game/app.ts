@@ -31,6 +31,7 @@ import {
   wrongWay as sfxWrongWay,
 } from "./audio";
 import { CameraRig } from "./cameras";
+import { PadSetup } from "./pad-setup";
 import { MiniMap } from "./minimap";
 import { Frogs } from "./frogs";
 import { Hud } from "./hud";
@@ -82,6 +83,7 @@ export class Game {
   private readonly race: Race;
   private readonly rig: CameraRig;
   private readonly minimap: MiniMap;
+  private readonly padSetup: PadSetup;
   private readonly input: InputManager;
   private readonly hud: Hud;
   private readonly shadow: ShadowGenerator;
@@ -242,6 +244,8 @@ export class Game {
       this.records,
     );
 
+    this.padSetup = new PadSetup(this.input);
+
     this.race = new Race(this.track, LAP_COUNT, (event) => this.onRaceEvent(event));
     this.applySettings(this.settings);
     if (storageAvailable) this.hud.bootDone();
@@ -300,11 +304,13 @@ export class Game {
     if (dt > 0.25) dt = 1 / 60; // retour d'un onglet placé en arrière-plan
 
     const inMenus = this.hud.inMenus;
+    this.input.configuring = this.hud.screen === "controller";
     const frame = this.input.update(inMenus);
+    this.padSetup.update(this.input.configuring);
     this.hud.setPadPrompt(frame.padPending && inMenus);
 
     if (inMenus) {
-      if (this.input.padReady) this.hud.navigate(frame);
+      if (this.input.padReady && !this.input.configuring) this.hud.navigate(frame);
       if (frame.pause) this.hud.goBack();
       this.menuCamera(dt);
     } else {
@@ -696,6 +702,7 @@ export class Game {
     for (const detach of this.detach) detach();
     this.detach.length = 0;
     this.engine.stopRenderLoop();
+    this.padSetup.dispose();
     this.input.dispose();
     this.hud.dispose();
     this.rig.dispose();

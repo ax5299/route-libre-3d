@@ -76,3 +76,19 @@ Les réglages et records sont enregistrés dans le navigateur de chaque joueur.
 - Application GitHub Vercel autorisée sur `ax5299/route-libre-3d` ;
   liaison du projet établie avec `main` comme branche de production.
 - Les deux projets Piscari existants restent indépendants de ce projet.
+
+### Manettes Xbox et génériques
+
+Les manettes au format navigateur standard gardent leurs commandes automatiques.
+Depuis le menu principal ou la pause, **Configurer ma manette** permet de choisir
+le périphérique et d'associer direction gauche/droite, gaz, frein, puis les actions
+facultatives. Relâcher les commandes avant chaque détection ; les gâchettes sous
+forme d'axes (y compris au repos à -1) et les boutons sont pris en charge.
+Enregistrer applique le profil et le conserve par identifiant, disposition et
+nombre d'axes/boutons dans ce navigateur. Retour annule un brouillon ; revenir à
+la configuration automatique efface uniquement le profil de la manette choisie.
+L'aperçu montre tous les signaux reçus : si les joysticks n'émettent rien, vérifier
+le mode MODE/ANALOG/XInput ou associer des boutons / la croix à la direction.
+La conduite reste disponible au clavier et les commandes ignorées y restent accessibles.
+
+Vérification : serveur local actif, `npm run test:gamepad` simule les manettes dans Edge/Chrome (captures dans `.smoke/gamepad/`). `npm run smoke` vérifie le parcours général du jeu. Les essais matériels restent à réaliser avec chaque manette.

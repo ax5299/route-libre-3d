@@ -1,3 +1,4 @@
+import { PadProfiles, readBinding } from "./pad-profile";
 import type { VehicleInput } from "./vehicle";
 import { clamp } from "./utils";
 
@@ -106,6 +107,22 @@ export class InputManager {
   private previousButtons: boolean[] = [];
   private keyTapped = false;
 
+  readonly profiles = new PadProfiles();
+  configuring = false;
+
+  get currentPad(): Gamepad | null {
+    const pads = navigator.getGamepads?.() ?? [];
+    return (this.padIndex >= 0 ? pads[this.padIndex] : null) ?? Array.from(pads).find(p => !!p) ?? null;
+  }
+
+  selectPad(index: number): void {
+    this.padIndex = index;
+    this.padActive = false;
+    this.previousButtons = [];
+    const pad = this.currentPad;
+    this.padLayout = pad ? detectLayout(pad.id) : "generic";
+  }
+
   deadzone = DEAD_ZONE_DEFAULT;
   sensitivity = SENSITIVITY_DEFAULT;
 
@@ -158,6 +175,8 @@ export class InputManager {
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
     if (event.repeat) return;
+    // Dans l'assistant, laisser la souris et le clavier piloter les vrais contrôles HTML.
+    if (this.configuring && event.code !== "Escape") return;
     if (SWALLOWED.has(event.code) && !(event.target instanceof HTMLInputElement)) {
       event.preventDefault();
     }
@@ -221,8 +240,15 @@ export class InputManager {
     names: string[];
   } {
     const buttons = present.buttons;
+    const custom = this.profiles.get(present);
     const pressedNow: boolean[] = [];
     for (let i = 0; i < buttons.length; i++) pressedNow.push(!!buttons[i] && buttons[i].pressed);
+    if (custom) {
+      const actions = { [BTN_CROSS]: "confirm", [BTN_CIRCLE]: "back", [BTN_TRIANGLE]: "camera", [BTN_START]: "pause", 16: "reset" } as const;
+      for (const [index, action] of Object.entries(actions)) pressedNow[Number(index)] = readBinding(present, custom[action]) > 0.5;
+      // Une manette générique ne doit pas déclencher une navigation standard par hasard.
+      for (const index of [BTN_UP, BTN_DOWN, BTN_LEFT, BTN_RIGHT]) pressedNow[index] = false;
+    }
     const edges: boolean[] = [];
     for (let i = 0; i < pressedNow.length; i++) {
       edges.push(pressedNow[i] && !this.previousButtons[i]);
@@ -235,20 +261,22 @@ export class InputManager {
       if (button && typeof button.value === "number") return clamp(button.value, 0, 1);
       return clamp(axis(i), 0, 1);
     };
-    const axisX = this.shaped(axis(0));
+    const profile = this.profiles.get(present);
+    const mapped = (action: keyof NonNullable<typeof profile>): number => readBinding(present, profile?.[action] ?? null);
+    const axisX = this.shaped(profile ? mapped("right") - mapped("left") : axis(0));
     const axisY = this.shaped(axis(1));
     const names: string[] = [];
-    for (let i = 0; i < pressedNow.length; i++) if (pressedNow[i]) names.push(String(i));
+    for (let i = 0; i < buttons.length; i++) if (buttons[i].pressed) names.push(String(i));
 
     return {
-      throttle: trigger(7),
-      brake: trigger(6),
+      throttle: profile ? mapped("throttle") : trigger(7),
+      brake: profile ? mapped("brake") : trigger(6),
       steer: axisX * this.sensitivity,
       axisX,
       axisY,
-      handbrake: pressedNow[BTN_SQUARE] ?? false,
+      handbrake: profile ? mapped("handbrake") > 0.5 : pressedNow[BTN_SQUARE] ?? false,
       edges,
-      any: pressedNow.some(Boolean) || Math.abs(axisX) > 0.02 || Math.abs(axisY) > 0.02 || Math.abs(axis(2)) > 0.02,
+      any: buttons.some(b => b.pressed) || present.axes.some(v => Math.abs(v) > 0.2),
       names,
     };
   }
@@ -294,9 +322,8 @@ export class InputManager {
       axisY = read.axisY;
       edges = read.edges;
       names = read.names;
-      const button = present ? (pad.buttons[6]?.value ?? 0) : 0;
-      rawLeft = clamp(button, 0, 1);
-      rawRight = present ? (pad.buttons[7]?.value ?? 0) : 0;
+      rawLeft = read.brake;
+      rawRight = read.throttle;
       if (this.padActive) {
         padThrottle = read.throttle;
         padBrake = read.brake;
@@ -322,7 +349,7 @@ export class InputManager {
 
     // --- actions -----------------------------------------------------------
     const edge = (index: number): boolean => this.padActive && !!edges[index];
-    f.resetCar = this.tapped(KEYS.reset) || edge(BTN_CIRCLE);
+    f.resetCar = this.tapped(KEYS.reset) || edge(pad && this.profiles.get(pad) ? 16 : BTN_CIRCLE);
     f.switchCamera = this.tapped(KEYS.camera) || edge(BTN_TRIANGLE);
     f.pause = this.tapped(KEYS.pause) || edge(BTN_START);
     f.confirm = this.tapped(KEYS.confirm) || edge(BTN_CROSS);
@@ -358,6 +385,12 @@ export class InputManager {
     f.rawButtons = names.length > 0 ? names.join(" ") : "—";
     f.keyTap = this.keyTapped;
 
+    if (this.configuring) {
+      f.throttle = f.brake = f.steer = 0;
+      f.handbrake = f.resetCar = f.switchCamera = f.confirm = f.back = false;
+      f.menuUp = f.menuDown = f.menuLeft = f.menuRight = false;
+      f.pause = this.tapped(KEYS.pause);
+    }
     this.keyTapped = false;
     this.tapBuffer.clear();
     return f;

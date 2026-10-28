@@ -3,9 +3,10 @@ import { CIRCUIT_LABELS, type CircuitId, type Records, type Settings } from "./s
 import { clamp, formatLapTime } from "./utils";
 
 /** Écrans superposés au rendu 3D. `game` = aucun écran, HUD visible. */
-export type ScreenName = "home" | "commands" | "settings" | "pause" | "finish" | "game";
+export type ScreenName = "home" | "commands" | "settings" | "pause" | "finish" | "controller" | "game";
 
 const SCREEN_IDS: Record<Exclude<ScreenName, "game">, string> = {
+  controller: "screen-controller",
   home: "screen-home",
   commands: "screen-commands",
   settings: "screen-settings",
@@ -204,6 +205,10 @@ export class Hud {
         case "commands":
           this.returnTo = this.screen === "pause" ? "pause" : "home";
           this.setScreen("commands");
+          break;
+        case "controller":
+          this.returnTo = this.screen === "pause" ? "pause" : "home";
+          this.setScreen("controller");
           break;
         case "settings":
           this.returnTo = this.screen === "pause" ? "pause" : "home";
