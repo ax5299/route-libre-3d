@@ -186,7 +186,7 @@ export class CameraRig {
     this.chase.rotation.set(0.16, Math.atan2(Math.cos(car.heading), Math.sin(car.heading)), 0);
     this.chase.fov = 0.8;
     this.cockpit.position.set(position.x + this.forward.x * 0.2, position.y + 1.3, position.z + this.forward.z * 0.2);
-    this.cockpit.rotation.set(0, car.heading, 0);
+    this.cockpit.rotation.set(0, Math.atan2(Math.cos(car.heading), Math.sin(car.heading)), 0);
   }
 
   /** Branche les caméras actives sur la scène (à appeler après un changement). */

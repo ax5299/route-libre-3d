@@ -154,8 +154,8 @@ export class FacetBuilder {
       const a1 = ((i + 1) / segments) * Math.PI * 2;
       const lit = 0.84 + 0.3 * Math.max(0, Math.cos(a0 + Math.PI / 4));
       this.tri(
-        { x: Math.cos(a0) * radius, y: 0, z: Math.sin(a0) * radius },
         { x: Math.cos(a1) * radius, y: 0, z: Math.sin(a1) * radius },
+        { x: Math.cos(a0) * radius, y: 0, z: Math.sin(a0) * radius },
         { x: 0, y: height, z: 0 },
         Color3.Lerp(baseColor, tipColor, 0.55).scale(lit),
       );
@@ -176,26 +176,44 @@ export class FacetBuilder {
       const lit = 0.78 + 0.38 * Math.max(0, Math.cos(a0 - Math.PI / 5));
       const c = color.scale(lit);
       this.quad(
-        { x: Math.cos(a0) * radius, y: 0, z: Math.sin(a0) * radius },
         { x: Math.cos(a1) * radius, y: 0, z: Math.sin(a1) * radius },
-        { x: Math.cos(a1) * topRadius, y: height, z: Math.sin(a1) * topRadius },
+        { x: Math.cos(a0) * radius, y: 0, z: Math.sin(a0) * radius },
         { x: Math.cos(a0) * topRadius, y: height, z: Math.sin(a0) * topRadius },
+        { x: Math.cos(a1) * topRadius, y: height, z: Math.sin(a1) * topRadius },
         c,
       );
       const top = color.scale(1.18);
       const bottom = color.scale(0.66);
       this.tri(
-        { x: Math.cos(a0) * topRadius, y: height, z: Math.sin(a0) * topRadius },
         { x: Math.cos(a1) * topRadius, y: height, z: Math.sin(a1) * topRadius },
+        { x: Math.cos(a0) * topRadius, y: height, z: Math.sin(a0) * topRadius },
         { x: 0, y: height, z: 0 },
         top,
       );
       this.tri(
-        { x: Math.cos(a1) * radius, y: 0, z: Math.sin(a1) * radius },
         { x: Math.cos(a0) * radius, y: 0, z: Math.sin(a0) * radius },
+        { x: Math.cos(a1) * radius, y: 0, z: Math.sin(a1) * radius },
         { x: 0, y: 0, z: 0 },
         bottom,
       );
+    }
+    return this;
+  }
+
+  /**
+   * Pastille ovale dans le plan (x, y), face visible vers ±z : phares, feux,
+   * glaces de rétroviseur. Le `rotationY` du placement l'oriente à volonté.
+   */
+  disc(opts: { rx: number; ry: number; segments: number }, front: Color3, back: Color3): this {
+    const { rx, ry, segments } = opts;
+    const center: Vec3 = { x: 0, y: 0, z: 0 };
+    for (let i = 0; i < segments; i++) {
+      const a0 = (i / segments) * Math.PI * 2;
+      const a1 = ((i + 1) / segments) * Math.PI * 2;
+      const p0: Vec3 = { x: Math.cos(a0) * rx, y: Math.sin(a0) * ry, z: 0 };
+      const p1: Vec3 = { x: Math.cos(a1) * rx, y: Math.sin(a1) * ry, z: 0 };
+      this.tri(center, p0, p1, front);
+      this.tri(center, p1, p0, back);
     }
     return this;
   }

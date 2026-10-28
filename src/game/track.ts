@@ -644,12 +644,14 @@ export class Track {
         .place({
           position: { x: smp.x + smp.nx * lat, y: baseY - 0.2, z: smp.z + smp.nz * lat },
         })
-        .prism({ radius: 0.7, height: 6.6, segments: 6, topRadius: 0.5 }, PALETTE.barrierPost);
+        .prism({ radius: 0.7, height: 14.1, segments: 6, topRadius: 0.5 }, PALETTE.barrierPost);
     }
-    const mid = { x: smp.x, y: baseY + 6.9, z: smp.z };
+    const mid = { x: smp.x, y: baseY + 14.4, z: smp.z };
     gantry.place({ position: mid, rotationY: -(heading + Math.PI / 2) }).box({ w: 26, h: 1.1, d: 0.9 }, PALETTE.barrierSteel);
+    const signNx = Math.cos(heading);
+    const signNz = Math.sin(heading);
     gantry
-      .place({ position: { x: mid.x, y: mid.y - 1.35, z: mid.z }, rotationY: -(heading + Math.PI / 2) })
+      .place({ position: { x: mid.x + signNx * 0.4, y: mid.y, z: mid.z + signNz * 0.4 }, rotationY: -(heading + Math.PI / 2) })
       .box({ w: 13, h: 1.9, d: 0.35 }, PALETTE.paintWhite);
     gantry.place(null);
     const beam = gantry.toMesh(this.scene, "finish-gantry");
@@ -658,7 +660,7 @@ export class Track {
     const panel = MeshBuilder.CreatePlane("finish-sign", { width: 12.6, height: 1.75 }, this.scene);
     panel.material = this.labelMaterial("ARRIVÉE", PALETTE.paintYellow);
     panel.parent = this.root;
-    panel.position.set(mid.x, mid.y - 1.35, mid.z);
+    panel.position.set(mid.x + signNx * 0.6, mid.y, mid.z + signNz * 0.6);
     panel.rotation.y = Math.PI / 2 - heading;
     panel.freezeWorldMatrix();
     this.created.push(panel);
@@ -678,7 +680,7 @@ export class Track {
       const fb = new FacetBuilder();
       const pylonColor = major ? PALETTE.barrierPost : PALETTE.barrierSteel.scale(0.8);
       const beaconColor = major ? PALETTE.paintYellow : PALETTE.paintWhite;
-      const height = major ? 6.4 : 3.2;
+      const height = major ? 7.8 : 4.2;
       for (const side of [-1, 1]) {
         const lat = (major ? 11.6 : 10.6) * side;
         const base = {

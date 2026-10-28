@@ -149,77 +149,270 @@ export class Car {
 
   private buildModel(bodyColor: Color3): void {
     const paint = new FacetBuilder();
-    paint.box({ w: 1.9, h: 0.52, d: 4.15, y: 0.5 }, bodyColor);
-    // bandes de course
-    for (const x of [-0.34, 0.34]) {
-      paint.place({ position: { x, y: 0.79, z: 0.1 } }).box({ w: 0.2, h: 0.04, d: 4.0 }, PALETTE.paintWhite);
-    }
-    const paintMat = this.mat("car-paint-mat", { specular: 62 });
-    this.add(paint.toMesh(this.scene, "car-paint"), paintMat);
-    // vitres latérales, habitacle et toit : maillage séparé, masqué en vue
-    // cockpit pour que la caméra (y ≈ 1,0) ne traverse aucune caisse.
     const top = new FacetBuilder();
-    top
-      .place({ position: { x: 0, y: 0.72, z: -0.02 }, scale: { x: 0.94, y: 0.34, z: 0.86 } })
-      .box({ w: 1.9, h: 0.52, d: 4.15 }, bodyColor.scale(1.12));
-    top.place({ position: { x: 0, y: 0.98, z: -0.3 } }).box({ w: 1.52, h: 0.34, d: 1.86 }, bodyColor.scale(0.92));
-    top.place({ position: { x: 0, y: 1.16, z: -0.34 } }).box({ w: 1.34, h: 0.08, d: 1.6 }, bodyColor.scale(1.22));
+    const trim = new FacetBuilder();
+    const glass = new FacetBuilder();
+    const lamps = new FacetBuilder();
+    const tails = new FacetBuilder();
+
+    // Coque profilée : anneaux (demi-largeur / hauteur de pont) relingués le
+    // long de z, du nez (z+) à la poupe (z-). Les faces sont orientées vers
+    // l'extérieur et éclairées par une teinte facettée (toit clair, fond sombre).
+    interface P2 {
+      x: number;
+      y: number;
+    }
+    type P3 = { x: number; y: number; z: number };
+    // Coupe en super-ellipse (coins arrondis, faces plates) : le nez est un
+    // peu plus étroit en bas, la poupe un peu plus large → formes galbées.
+    const superRing = (hw: number, low: number, top: number, n: number, count: number): P2[] => {
+      const c = (low + top) / 2;
+      const hh = (top - low) / 2;
+      const pts: P2[] = [];
+      for (let i = 0; i < count; i++) {
+        const t = (i / count) * Math.PI * 2;
+        const ct = Math.cos(t);
+        const st = Math.sin(t);
+        const x = hw * Math.sign(ct) * Math.pow(Math.abs(ct), 2 / n);
+        const y = c + hh * Math.sign(st) * Math.pow(Math.abs(st), 2 / n);
+        pts.push({ x: x * (0.92 + 0.08 * ((y - c) / hh)), y });
+      }
+      return pts;
+    };
+    // contrôles (z décroissant, demi-largeur, hauteur de pont) : interpolation
+    // lissée puis échantillonnage dense pour une carrosserie sans à-coups.
+    const bodyControls: readonly [number, number, number][] = [
+      [2.18, 0.4, 0.46],
+      [1.98, 0.66, 0.53],
+      [1.72, 0.8, 0.575],
+      [1.4, 0.9, 0.61],
+      [1.05, 0.945, 0.655],
+      [0.65, 0.96, 0.695],
+      [0.2, 0.97, 0.715],
+      [-0.35, 0.98, 0.725],
+      [-0.9, 0.975, 0.715],
+      [-1.4, 0.95, 0.68],
+      [-1.8, 0.86, 0.6],
+      [-2.05, 0.74, 0.545],
+      [-2.18, 0.66, 0.5],
+    ];
+    const cabinControls: readonly [number, number, number][] = [
+      [0.95, 0.4, 0.72],
+      [0.8, 0.55, 0.9],
+      [0.58, 0.635, 1.05],
+      [0.3, 0.675, 1.15],
+      [-0.05, 0.69, 1.2],
+      [-0.4, 0.675, 1.17],
+      [-0.68, 0.64, 1.08],
+      [-0.88, 0.57, 0.95],
+      [-1, 0.48, 0.78],
+    ];
+    const stations = (
+      controls: readonly [number, number, number][],
+      steps: number,
+      n: number,
+      count: number,
+      low: number,
+    ): { z: number; pts: P2[] }[] => {
+      const list: { z: number; pts: P2[] }[] = [];
+      const z0 = controls[0][0];
+      const z1 = controls[controls.length - 1][0];
+      for (let i = 0; i <= steps; i++) {
+        const z = z0 - (i / steps) * (z0 - z1);
+        let k = 0;
+        while (k < controls.length - 2 && controls[k + 1][0] > z) k++;
+        const a = controls[k];
+        const b = controls[k + 1];
+        const u = Math.max(0, Math.min(1, (z - a[0]) / (b[0] - a[0])));
+        const s = 0.5 - 0.5 * Math.cos(u * Math.PI);
+        list.push({ z, pts: superRing(a[1] + (b[1] - a[1]) * s, low, a[2] + (b[2] - a[2]) * s, n, count) });
+      }
+      return list;
+    };
+    const shade = (a: P3, b: P3, c: P3, tint: Color3): Color3 => {
+      const ux = b.x - a.x;
+      const uy = b.y - a.y;
+      const uz = b.z - a.z;
+      const vx = c.x - a.x;
+      const vy = c.y - a.y;
+      const vz = c.z - a.z;
+      let nx = uy * vz - uz * vy;
+      let ny = uz * vx - ux * vz;
+      let nz = ux * vy - uy * vx;
+      const len = Math.hypot(nx, ny, nz) || 1;
+      nx /= len;
+      ny /= len;
+      nz /= len;
+      const lit = 0.72 + 0.52 * Math.max(0, ny) + 0.18 * Math.max(0, nx) + 0.05 * Math.max(0, nz);
+      return tint.scale(lit);
+    };
+    const loft = (fb: FacetBuilder, rings: { z: number; pts: P2[] }[], color: Color3): void => {
+      for (let i = 0; i < rings.length - 1; i++) {
+        const front = rings[i];
+        const back = rings[i + 1];
+        const n = front.pts.length;
+        for (let k = 0; k < n; k++) {
+          const A = { x: back.pts[k].x, y: back.pts[k].y, z: back.z };
+          const B = { x: back.pts[(k + 1) % n].x, y: back.pts[(k + 1) % n].y, z: back.z };
+          const C = { x: front.pts[(k + 1) % n].x, y: front.pts[(k + 1) % n].y, z: front.z };
+          const D = { x: front.pts[k].x, y: front.pts[k].y, z: front.z };
+          fb.quad(A, B, C, D, shade(A, B, C, color));
+        }
+      }
+      const nose = rings[0];
+      let noseLow = Infinity;
+      let noseHigh = -Infinity;
+      for (const p of nose.pts) {
+        noseLow = Math.min(noseLow, p.y);
+        noseHigh = Math.max(noseHigh, p.y);
+      }
+      const noseC: P3 = { x: 0, y: (noseLow + noseHigh) / 2, z: nose.z };
+      for (let k = 0; k < nose.pts.length; k++) {
+        const a = nose.pts[k];
+        const b = nose.pts[(k + 1) % nose.pts.length];
+        fb.tri(noseC, { x: a.x, y: a.y, z: nose.z }, { x: b.x, y: b.y, z: nose.z }, color.scale(0.92));
+      }
+      const tail = rings[rings.length - 1];
+      let tailLow = Infinity;
+      let tailHigh = -Infinity;
+      for (const p of tail.pts) {
+        tailLow = Math.min(tailLow, p.y);
+        tailHigh = Math.max(tailHigh, p.y);
+      }
+      const tailC: P3 = { x: 0, y: (tailLow + tailHigh) / 2, z: tail.z };
+      for (let k = 0; k < tail.pts.length; k++) {
+        const a = tail.pts[(k + 1) % tail.pts.length];
+        const b = tail.pts[k];
+        fb.tri(tailC, { x: a.x, y: a.y, z: tail.z }, { x: b.x, y: b.y, z: tail.z }, color.scale(0.78));
+      }
+    };
+
+    loft(paint, stations(bodyControls, 26, 3.4, 12, 0.33), bodyColor);
+    // verrière teintée : pare-brise incliné, toit bombé, lunette arrière
+    const cabinSt = stations(cabinControls, 18, 2.8, 12, 0.6);
+    loft(glass, cabinSt, PALETTE.carGlass);
+
+    // toit peint : bande qui épouse le dôme de la verrière (décalée de 2,5 %
+    // vers l'extérieur pour ne pas fights avec le verre), masquée en cockpit
+    const roofTint = bodyColor.scale(1.12);
+    const out = (p: P2): P2 => ({ x: p.x * 1.025, y: 0.9 + (p.y - 0.9) * 1.025 });
+    const roofY = 1.06;
+    for (let i = 0; i < cabinSt.length - 1; i++) {
+      const front = cabinSt[i];
+      const back = cabinSt[i + 1];
+      for (let k = 0; k < front.pts.length; k++) {
+        const k2 = (k + 1) % front.pts.length;
+        if (
+          front.pts[k].y < roofY ||
+          front.pts[k2].y < roofY ||
+          back.pts[k].y < roofY ||
+          back.pts[k2].y < roofY
+        )
+          continue;
+        const A = { x: out(back.pts[k]).x, y: out(back.pts[k]).y, z: back.z };
+        const B = { x: out(back.pts[k2]).x, y: out(back.pts[k2]).y, z: back.z };
+        const C = { x: out(front.pts[k2]).x, y: out(front.pts[k2]).y, z: front.z };
+        const D = { x: out(front.pts[k]).x, y: out(front.pts[k]).y, z: front.z };
+        top.quad(A, B, C, D, shade(A, B, C, roofTint));
+      }
+    }
+    // bandes de course sur le pont arrière, épouse la pente du pont
+    for (const x of [-0.3, 0.3]) {
+      for (const [z, y] of [[-0.95, 0.714], [-1.25, 0.687], [-1.55, 0.655]] as const) {
+        paint.box({ w: 0.2, h: 0.05, d: 0.3, x, y, z }, PALETTE.paintWhite);
+      }
+    }
+    // liseré blanc le long des épaules
+    for (const x of [-0.89, 0.89]) {
+      paint.box({ w: 0.05, h: 0.045, d: 2.4, x, y: 0.5, z: -0.4 }, PALETTE.paintWhite);
+    }
+    // rétroviseurs : coque verticale et glace ovale tournée vers l'arrière
+    for (const side of [-1, 1]) {
+      paint.box({ w: 0.16, h: 0.05, d: 0.2, x: side * 1, y: 0.75, z: 0.52 }, bodyColor.scale(0.9));
+      paint.box({ w: 0.16, h: 0.2, d: 0.3, x: side * 1.12, y: 0.82, z: 0.5 }, bodyColor.scale(0.8));
+      paint.place({ position: { x: side * 1.12, y: 0.82, z: 0.34 }, rotationY: Math.PI });
+      paint.disc({ rx: 0.12, ry: 0.075, segments: 12 }, PALETTE.carGlass.scale(1.3), bodyColor.scale(0.5));
+      paint.place(null);
+    }
+    // ouïes d'aération du capot
+    for (const x of [-0.3, 0.3]) {
+      trim.box({ w: 0.2, h: 0.04, d: 0.5, x, y: 0.645, z: 1.2 }, PALETTE.carTrim);
+    }
+    // boucliers, bas de caisse, diffuseur : lippes et blocs ovales
+    trim
+      .place({ position: { x: 0, y: 0.28, z: 2.12 }, scale: { x: 1.85, y: 1, z: 0.3 } })
+      .prism({ radius: 0.5, height: 0.05, segments: 16 }, PALETTE.carTrim)
+      .place(null);
+    trim
+      .place({ position: { x: 0, y: 0.36, z: 2.165 }, scale: { x: 0.7, y: 1, z: 0.12 } })
+      .prism({ radius: 0.5, height: 0.1, segments: 12 }, PALETTE.carTrim)
+      .place(null);
+    for (const x of [-0.99, 0.99]) {
+      trim.box({ w: 0.08, h: 0.18, d: 2.9, x, y: 0.36, z: -0.4 }, PALETTE.carTrim);
+    }
+    for (const x of [-0.5, -0.17, 0.17, 0.5]) {
+      trim.box({ w: 0.05, h: 0.12, d: 0.2, x, y: 0.34, z: -2.2 }, PALETTE.carTrim);
+    }
+    // aileron : plan ovale sur étriers + plats latéraux arrondis
+    trim
+      .place({ position: { x: 0, y: 1.09, z: -1.98 }, scale: { x: 1.76, y: 1, z: 0.5 } })
+      .prism({ radius: 0.5, height: 0.07, segments: 20 }, PALETTE.carTrim)
+      .place(null);
+    for (const x of [-0.58, 0.58]) {
+      trim.box({ w: 0.07, h: 0.26, d: 0.14, x, y: 0.98, z: -1.95 }, PALETTE.carTrim);
+    }
+    for (const x of [-0.84, 0.84]) {
+      trim
+        .place({ position: { x, y: 0.9, z: -1.96 }, scale: { x: 0.05, y: 1, z: 0.52 } })
+        .prism({ radius: 0.5, height: 0.3, segments: 12 }, bodyColor.scale(1.2))
+        .place(null);
+    }
+    // optiques ovales affleurant le nez, légèrement pincés vers l'extérieur
+    for (const x of [-0.46, 0.46]) {
+      lamps.place({ position: { x, y: 0.48, z: 2.055 }, rotationY: -Math.sign(x) * 0.22 });
+      lamps.disc({ rx: 0.16, ry: 0.065, segments: 14 }, PALETTE.carLight, PALETTE.carTrim);
+      lamps.place(null);
+    }
+    // barre arrière ovale full-width (matériau séparé : s'allume au freinage)
+    tails
+      .place({ position: { x: 0, y: 0.455, z: -2.165 }, scale: { x: 1.45, y: 1, z: 0.09 } })
+      .prism({ radius: 0.5, height: 0.08, segments: 16 }, PALETTE.carTail)
+      .place(null);
+
+    const paintMat = this.mat("car-paint-mat", { specular: 78 });
+    this.add(paint.toMesh(this.scene, "car-paint"), paintMat);
+    // vitres et toit : maillages séparés, masqués en vue cockpit pour que la
+    // caméra (y ≈ 1,0) ne traverse aucune caisse.
     const topMesh = top.toMesh(this.scene, "car-top");
     this.roofTop = topMesh;
     this.add(topMesh, paintMat);
-
-    const trim = new FacetBuilder();
-    trim.box({ w: 1.98, h: 0.2, d: 0.42, y: 0.34, z: 2.02 }, PALETTE.tire);
-    trim.box({ w: 1.98, h: 0.22, d: 0.4, y: 0.36, z: -2.02 }, PALETTE.tire);
-    for (const x of [-0.98, 0.98]) {
-      trim.place({ position: { x, y: 0.26, z: 0 } }).box({ w: 0.12, h: 0.2, d: 2.9 }, PALETTE.tire);
-    }
-    // ailes
-    for (const x of [-0.86, 0.86]) {
-      for (const z of [FRONT_AXLE, -REAR_AXLE]) {
-        trim.place({ position: { x, y: 0.56, z } }).box({ w: 0.34, h: 0.26, d: 1.0 }, bodyColor.scale(0.8));
-      }
-    }
-    // aileron + diffuseur
-    for (const x of [-0.7, 0.7]) {
-      trim.place({ position: { x, y: 0.98, z: -1.92 } }).box({ w: 0.1, h: 0.34, d: 0.16 }, PALETTE.tire);
-    }
-    trim.place({ position: { x: 0, y: 1.18, z: -1.94 } }).box({ w: 1.72, h: 0.07, d: 0.46 }, PALETTE.carTrim);
-    trim.place({ position: { x: 0, y: 0.24, z: -2.12 } }).box({ w: 1.5, h: 0.16, d: 0.24 }, PALETTE.carTrim);
-    this.add(trim.toMesh(this.scene, "car-trim"), this.mat("car-trim-mat", { specular: 18 }));
-
-    const glass = new FacetBuilder();
-    glass
-      .place({ position: { x: 0, y: 1.0, z: 0.58 }, scale: { x: 0.82, y: 0.6, z: 0.86 } })
-      .box({ w: 1.6, h: 0.5, d: 1.5 }, PALETTE.carGlass);
     const glassMesh = glass.toMesh(this.scene, "car-glass");
     this.glassMesh = glassMesh;
-    this.add(glassMesh, this.mat("car-glass-mat", { alpha: 0.6, specular: 90 }));
-
-    const lamps = new FacetBuilder();
-    for (const x of [-0.62, 0.62]) {
-      lamps.place({ position: { x, y: 0.62, z: 2.16 } }).box({ w: 0.42, h: 0.16, d: 0.08 }, PALETTE.carLight);
-    }
+    this.add(glassMesh, this.mat("car-glass-mat", { alpha: 0.62, specular: 95 }));
+    this.add(trim.toMesh(this.scene, "car-trim"), this.mat("car-trim-mat", { specular: 22 }));
     this.add(
       lamps.toMesh(this.scene, "car-heads"),
       this.mat("car-heads-mat", { emissive: new Color3(0.5, 0.46, 0.38), specular: 6 }),
     );
-    // Feux arrière séparés : leur matériau s'allume au freinage.
-    const tailLamps = new FacetBuilder();
-    for (const x of [-0.62, 0.62]) {
-      tailLamps.place({ position: { x, y: 0.62, z: -2.2 } }).box({ w: 0.4, h: 0.14, d: 0.08 }, PALETTE.carTail);
-    }
-    const tailMesh = tailLamps.toMesh(this.scene, "car-tails");
+    const tailMesh = tails.toMesh(this.scene, "car-tails");
     this.tailMat = this.mat("car-tails-mat", { emissive: new Color3(0.22, 0.03, 0.02), specular: 6 });
     this.add(tailMesh, this.tailMat);
   }
 
   private buildWheels(): void {
-    const tireBuilder = new FacetBuilder().prism({ radius: WHEEL_RADIUS, height: 0.26, segments: 12 }, PALETTE.tire);
+    const tireBuilder = new FacetBuilder().prism({ radius: WHEEL_RADIUS, height: 0.26, segments: 16 }, PALETTE.tire);
     const rimBuilder = new FacetBuilder()
-      .prism({ radius: WHEEL_RADIUS * 0.62, height: 0.29, segments: 8 }, PALETTE.rim.scale(0.75))
+      .prism({ radius: WHEEL_RADIUS * 0.62, height: 0.29, segments: 12 }, PALETTE.rim.scale(0.75))
+      .place({ position: { x: 0, y: 0.05, z: 0 } })
+      .prism({ radius: WHEEL_RADIUS * 0.55, height: 0.12, segments: 12 }, PALETTE.carTrim.scale(1.25))
       .place({ position: { x: 0, y: 0.02, z: 0 } })
       .prism({ radius: WHEEL_RADIUS * 0.3, height: 0.31, segments: 6 }, PALETTE.rim);
+    for (let k = 0; k < 5; k++) {
+      rimBuilder
+        .place({ position: { x: 0, y: 0.295, z: 0 }, rotationY: (k * Math.PI) / 5 })
+        .box({ w: WHEEL_RADIUS * 1.18, h: 0.05, d: 0.1 }, PALETTE.rim.scale(1.12));
+    }
+    rimBuilder.place(null);
     const tireMesh = tireBuilder.toMesh(this.scene, "wheel-tire");
     const rimMesh = rimBuilder.toMesh(this.scene, "wheel-rim");
     if (!tireMesh || !rimMesh) return;

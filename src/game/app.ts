@@ -83,13 +83,11 @@ export class Game {
   private readonly input: InputManager;
   private readonly hud: Hud;
   private readonly shadow: ShadowGenerator;
-  private readonly boost: Mesh;
   private readonly shadowReceivers: Mesh[] = [];
 
   private accumulator = 0;
   private lastFrame = 0;
   private goTimer = 0;
-  private boostLevel = 0;
   private prevSlip = 0;
   private prevOnRoad = true;
   private hint = 0;
@@ -210,28 +208,6 @@ export class Game {
     for (const mesh of this.scene.meshes) {
       if (mesh instanceof Mesh && mesh.receiveShadows) this.shadowReceivers.push(mesh);
     }
-
-    // --- flamme d'échappement ------------------------------------------------
-    const flame = MeshBuilder.CreateCylinder(
-      "boost-flame",
-      { diameter: 0.26, height: 1, tessellation: 10 },
-      this.scene,
-    );
-    flame.rotation.x = Math.PI / 2;
-    flame.bakeCurrentTransformIntoVertices();
-    const flameMaterial = new StandardMaterial("boost-flame-material", this.scene);
-    flameMaterial.diffuseColor = Color3.Black();
-    flameMaterial.specularColor = Color3.Black();
-    flameMaterial.emissiveColor = PALETTE.sunGlow.scale(2.4);
-    flameMaterial.alpha = 0.5;
-    flameMaterial.disableLighting = true;
-    flameMaterial.fogEnabled = false;
-    flame.material = flameMaterial;
-    flame.parent = this.car.root;
-    flame.position.set(0, 0.42, -2.3);
-    flame.isPickable = false;
-    flame.setEnabled(false);
-    this.boost = flame;
 
     // --- trafic ---------------------------------------------------------------
     this.traffic = new Traffic(this.scene, this.world, this.track, this.settings.trafficCount);
@@ -411,7 +387,6 @@ export class Game {
     this.car.placeAt(this.track.positionAt(s, 0, this.focusPoint), this.track.headingAt(s));
     this.hint = this.track.query(this.car.position.x, this.car.position.z, this.car.heading, here.index).index;
     this.accumulator = 0;
-    this.boostLevel = 0;
   }
 
   /** Contact joueur ↔ trafic : ralentissement, rebond et son de choc. */
@@ -483,20 +458,6 @@ export class Game {
     if (this.goTimer > 0) {
       this.goTimer -= dt;
       if (this.goTimer <= 0) this.hud.setCountdown(null);
-    }
-    const load = clamp(
-      Math.abs(this.car.forwardVelocity) / SPEED_REFERENCE + (this.stepInput.throttle - 0.35) * 0.9,
-      0,
-      1.5,
-    );
-    const rate = load > this.boostLevel ? 9 : 5;
-    this.boostLevel += (load - this.boostLevel) * Math.min(1, dt * rate);
-    if (this.boostLevel < 0.06) {
-      this.boost.setEnabled(false);
-    } else {
-      this.boost.setEnabled(true);
-      const width = 0.55 + this.boostLevel * 0.45;
-      this.boost.scaling.set(width, width, 0.3 + this.boostLevel * 1.25);
     }
   }
 
@@ -649,7 +610,6 @@ export class Game {
     this.hint = this.track.query(this.car.position.x, this.car.position.z, this.car.heading, this.hint).index;
     this.prevSlip = 0;
     this.prevOnRoad = true;
-    this.boostLevel = 0;
     this.accumulator = 0;
     this.lastSteps = 0;
     this.copyInput(this.stepInput, NEUTRAL);
@@ -736,7 +696,6 @@ export class Game {
     this.input.dispose();
     this.hud.dispose();
     this.rig.dispose();
-    this.boost.dispose();
     this.traffic.dispose();
     this.frogs.dispose();
     this.car.dispose();
