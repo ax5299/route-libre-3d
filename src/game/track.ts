@@ -168,28 +168,52 @@ export class Track {
     return Math.floor(wrap01(s / this.totalLength) * m) % m;
   }
 
-  /** Cap de la piste à l'abscisse `s`. */
+  private readonly pair = { a: null as unknown as Sample, b: null as unknown as Sample, f: 0 };
+
+  /**
+   * Échantillons encadrant `s` et fraction entre les deux. Sans interpolation,
+   * le trafic posé sur l'axe saute d'un échantillon (2 m) au suivant : capot
+   * et cap tremblent à l'écran. `query` (physique du joueur) garde `indexAtS`.
+   */
+  private pairAt(s: number): { a: Sample; b: Sample; f: number } {
+    const m = this.samples.length;
+    const u = wrap01(s / this.totalLength) * m;
+    const i = Math.floor(u) % m;
+    this.pair.a = this.samples[i];
+    this.pair.b = this.samples[(i + 1) % m];
+    this.pair.f = u - Math.floor(u);
+    return this.pair;
+  }
+
+  /** Cap de la piste à l'abscisse `s` (interpolé). */
   headingAt(s: number): number {
-    const smp = this.samples[this.indexAtS(s)];
-    return Math.atan2(smp.tz, smp.tx);
+    const { a, b, f } = this.pairAt(s);
+    return Math.atan2(a.tz + (b.tz - a.tz) * f, a.tx + (b.tx - a.tx) * f);
   }
 
   /** Courbure locale (1/m), utilisée par la caméra et les indications sonores. */
   curvatureAt(s: number): number {
-    return this.samples[this.indexAtS(s)].curvature;
+    const { a, b, f } = this.pairAt(s);
+    return a.curvature + (b.curvature - a.curvature) * f;
   }
 
   /** Position sur la route, décalée latéralement (positive = gauche de l'axe). */
   positionAt(s: number, lateral: number, out = new Vector3()): Vector3 {
-    const smp = this.samples[this.indexAtS(s)];
-    out.set(smp.x + smp.nx * lateral, smp.y, smp.z + smp.nz * lateral);
+    const { a, b, f } = this.pairAt(s);
+    const nx = a.nx + (b.nx - a.nx) * f;
+    const nz = a.nz + (b.nz - a.nz) * f;
+    out.set(
+      a.x + (b.x - a.x) * f + nx * lateral,
+      a.y + (b.y - a.y) * f,
+      a.z + (b.z - a.z) * f + nz * lateral,
+    );
     return out;
   }
 
   /** Hauteur du sol (revêtement, accotement ou talus). */
   heightAt(s: number, lateral: number): number {
-    const smp = this.samples[this.indexAtS(s)];
-    return this.heightFromSample(smp.y, lateral);
+    const { a, b, f } = this.pairAt(s);
+    return this.heightFromSample(a.y + (b.y - a.y) * f, lateral);
   }
 
   private heightFromSample(roadY: number, lateral: number): number {
@@ -672,6 +696,21 @@ export class Track {
   private readonly gateMaterials: StandardMaterial[] = [];
 
   private buildCheckpointArch(): void {
+    // Chiffres à 7 segments en boîtes. Bits : a=1000000 (haut), f=0100000 (haut
+    // gauche), c=0010000 (bas droit), b=0001000 (haut droit), d=0000100 (bas),
+    // e=0000010 (bas gauche), g=0000001 (milieu). `m` = -1 pour lire face à
+    // l'approche (le visage avant du portique est miroir du visage arrière).
+    const DIGITS = [0b1111110, 0b0011000, 0b1001111, 0b1011101, 0b0111001, 0b1110101, 0b1110111, 0b1011000, 0b1111111, 0b1111101];
+    const digit = (fb: FacetBuilder, cx: number, cy: number, n: number, color: Color3, zoff: number, m: number): void => {
+      const seg = DIGITS[n];
+      if (seg & 0b1000000) fb.box({ w: 0.7, h: 0.14, d: 0.28, x: cx, y: cy + 0.57, z: zoff }, color);
+      if (seg & 0b0000001) fb.box({ w: 0.7, h: 0.14, d: 0.28, x: cx, y: cy, z: zoff }, color);
+      if (seg & 0b0000100) fb.box({ w: 0.7, h: 0.14, d: 0.28, x: cx, y: cy - 0.57, z: zoff }, color);
+      if (seg & 0b0000010) fb.box({ w: 0.14, h: 0.49, d: 0.28, x: cx + m * -0.32, y: cy - 0.29, z: zoff }, color);
+      if (seg & 0b0010000) fb.box({ w: 0.14, h: 0.49, d: 0.28, x: cx + m * 0.32, y: cy - 0.29, z: zoff }, color);
+      if (seg & 0b0100000) fb.box({ w: 0.14, h: 0.49, d: 0.28, x: cx + m * -0.32, y: cy + 0.29, z: zoff }, color);
+      if (seg & 0b0001000) fb.box({ w: 0.14, h: 0.49, d: 0.28, x: cx + m * 0.32, y: cy + 0.29, z: zoff }, color);
+    };
     for (let c = 0; c < this.checkpoints.length; c++) {
       const cp = this.checkpoints[c];
       const smp = this.samples[this.indexAtS(cp.s)];
@@ -681,6 +720,7 @@ export class Track {
       const pylonColor = major ? PALETTE.barrierPost : PALETTE.barrierSteel.scale(0.8);
       const beaconColor = major ? PALETTE.paintYellow : PALETTE.paintWhite;
       const height = major ? 7.8 : 4.2;
+      const yaw = -(heading + Math.PI / 2);
       for (const side of [-1, 1]) {
         const lat = (major ? 11.6 : 10.6) * side;
         const base = {
@@ -694,14 +734,32 @@ export class Track {
         );
         fb.place({
           position: { x: base.x, y: base.y + height - 0.9, z: base.z },
-          rotationY: -(heading + Math.PI / 2),
+          rotationY: yaw,
         }).box({ w: major ? 2.2 : 1.1, h: 1.5, d: major ? 0.5 : 0.3 }, beaconColor);
       }
-      if (major) {
-        fb.place({ position: { x: smp.x, y: smp.y + height + 0.35, z: smp.z }, rotationY: -(heading + Math.PI / 2) }).box(
-          { w: 24, h: 0.8, d: 0.7 },
-          PALETTE.barrierSteel,
+      // poutre + ardoise du numéro, posée au-dessus de la poutre (dégagée)
+      const beamY = smp.y + height + (major ? 0.35 : 0.22);
+      fb.place({ position: { x: smp.x, y: beamY, z: smp.z }, rotationY: yaw }).box(
+        major ? { w: 24, h: 0.8, d: 0.7 } : { w: 21.4, h: 0.55, d: 0.45 },
+        PALETTE.barrierSteel,
+      );
+      // numéro = rang de passage dans le tour (le portique 0 est la ligne
+      // d'arrivée, non compté) : identique aux toasts « Portique X / Y »
+      const label = c === 0 ? "" : String(c);
+      if (label) {
+        const boardW = (label.length > 1 ? 2.9 : 1.8) + (major ? 1.2 : 0.9);
+        const boardH = major ? 2.0 : 1.7;
+        fb.place({ position: { x: smp.x, y: beamY + 0.3 + boardH / 2, z: smp.z }, rotationY: yaw }).box(
+          { w: boardW, h: boardH, d: 0.4 },
+          PALETTE.paintWhite,
         );
+        const digitColor = major ? PALETTE.barrierSteel.scale(0.55) : PALETTE.barrierPost;
+        // +z = face à l'approche (miroir), -z = face arrière
+        for (const [zoff, m] of [[0.24, -1], [-0.24, 1]] as const) {
+          for (let d = 0; d < label.length; d++) {
+            digit(fb, m * (d - (label.length - 1) / 2) * 1.28, 0, Number(label[d]), digitColor, zoff, m);
+          }
+        }
       }
       fb.place(null);
       const mesh = fb.toMesh(this.scene, `gate-${c}`);
@@ -1198,35 +1256,65 @@ const CRETES_ELEVATION: number[] = [
 
 /**
  * Interprétation stylisée du circuit Gilles-Villeneuve (île Notre-Dame,
- * Montréal) : tour d'environ 4,35 km dans le sens horaire, trois longues
- * lignes droites, les chicanes (Senna, treize-cent-trente), l'épingle de
- * l'Éperon et le mur des Champions (SAS 11-12-13) avant la ligne des stands.
- * Le tracé est une adaptation jouable, pas une reproduction au GPS près.
+ * Montréal), sens horaire, tour d'environ 4,3 km, fidèle à la silhouette en
+ * croissant de l'île : courte ligne des stands en biais au nord-est après le
+ * SAS du mur des Champions, grand balayage continu autour de la pointe est,
+ * ligne des ponts vers l'ouest avec ses légers S, épingle du Casino à la
+ * pointe ouest, remontée nord-ouest puis longue rive nord arquée vers l'est
+ * jusqu'au SAS final. Le lac du centre reste entre les deux lignes droites,
+ * comme sur l'île. Adaptation jouable, pas reproduction GPS.
  */
 const VILLENEUVE_POINTS: CircuitPoint[] = [
-  { x: 0, z: 0, start: true },
-  { x: 715, z: -9 },
-  { x: 863, z: 109 },
-  { x: 873, z: 276 },
-  { x: 805, z: 437 },
-  { x: 845, z: 540 },
-  { x: 736, z: 673 },
-  { x: 265, z: 750 },
-  { x: -207, z: 790 },
-  { x: -495, z: 736 },
-  { x: -627, z: 598 },
-  { x: -581, z: 495 },
-  { x: -644, z: 380 },
-  { x: -650, z: 219 },
-  { x: -541, z: 109 },
-  { x: -380, z: 150 },
-  { x: -230, z: 145 },
-  { x: -95, z: 60 },
+  { x: 740, z: 340, start: true }, // ligne des stands en biais, cap sud-sud-est
+  { x: 762, z: 215 },
+  { x: 800, z: 105 }, // balayage droit autour de la pointe est
+  { x: 820, z: -10 },
+  { x: 785, z: -135 },
+  { x: 700, z: -235 },
+  { x: 570, z: -288 },
+  { x: 400, z: -300 }, // ligne des ponts vers l'ouest, léger S de chicanes
+  { x: 330, z: -285 },
+  { x: 260, z: -302 },
+  { x: 190, z: -288 },
+  { x: -60, z: -300 },
+  { x: -300, z: -280 },
+  { x: -560, z: -250 },
+  { x: -700, z: -232 },
+  { x: -800, z: -215 }, // approche de l'épingle du Casino, cap vers l'ouest
+  { x: -893, z: -198 }, // entrée de l'épingle (demi-cercle R≈48)
+  { x: -910, z: -195 },
+  { x: -924, z: -187 },
+  { x: -935, z: -174 },
+  { x: -940, z: -158 },
+  { x: -940, z: -142 }, // pointe ouest de l'île
+  { x: -935, z: -126 },
+  { x: -924, z: -113 },
+  { x: -910, z: -105 },
+  { x: -893, z: -102 }, // sortie de l'épingle cap vers l'est
+  { x: -845, z: -99 },
+  { x: -812, z: -35 }, // remontée vers le nord
+  { x: -802, z: 45 },
+  { x: -792, z: 130 },
+  { x: -765, z: 230 },
+  { x: -700, z: 320 },
+  { x: -600, z: 385 },
+  { x: -520, z: 405 },
+  { x: -350, z: 425 }, // rive nord arquée vers l'est
+  { x: -80, z: 448 },
+  { x: 200, z: 442 },
+  { x: 430, z: 425 },
+  { x: 505, z: 409 }, // SAS du mur des Champions (gauche-droite-gauche)
+  { x: 568, z: 425 },
+  { x: 628, z: 402 },
+  { x: 680, z: 416 },
+  { x: 716, z: 394 },
 ];
 
 /** Plateau montréalais : très peu de dénivelé, deux légères bosses de pont. */
 const VILLENEUVE_ELEVATION: number[] = [
-  0, 0.2, 0.8, 1.8, 1.2, 0.4, 0.2, 0, 0.3, 1.4, 2.6, 1.6, 0.6, 0.2, 0.4, 1.8, 2.2, 1.2,
+  0, 0.2, 0.6, 1.0, 0.6, 0.2, 0, 0.3, 0, 0.3, 0, 0.5, 0.8, 0.5, 0.2, 0.1, 0, 0.2, 0.4,
+  0.6, 0.7, 0.6, 0.4, 0.2, 0.1, 0, 0.1, 0.3, 0.5, 0.6, 0.5, 0.3, 0.1, 0, 0.2, 0.4, 0.3,
+  0.1, 0.2, 0.4, 0.2, 0.1, 0,
 ];
 
 /** Circuits disponibles dans les réglages. */

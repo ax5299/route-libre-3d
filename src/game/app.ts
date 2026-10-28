@@ -31,6 +31,7 @@ import {
   wrongWay as sfxWrongWay,
 } from "./audio";
 import { CameraRig } from "./cameras";
+import { MiniMap } from "./minimap";
 import { Frogs } from "./frogs";
 import { Hud } from "./hud";
 import { InputManager, type InputFrame } from "./input";
@@ -80,12 +81,14 @@ export class Game {
   private readonly frogs: Frogs;
   private readonly race: Race;
   private readonly rig: CameraRig;
+  private readonly minimap: MiniMap;
   private readonly input: InputManager;
   private readonly hud: Hud;
   private readonly shadow: ShadowGenerator;
   private readonly shadowReceivers: Mesh[] = [];
 
   private accumulator = 0;
+  private lastS = 0;
   private lastFrame = 0;
   private goTimer = 0;
   private prevSlip = 0;
@@ -95,7 +98,6 @@ export class Game {
   private audioReady = false;
   private started = false;
   private menuTime = 0;
-  private mapVisible = false;
   private readonly stepInput: VehicleInput = { ...NEUTRAL };
   private readonly prevStepInput: VehicleInput = { ...NEUTRAL };
   private readonly focusPoint = new Vector3();
@@ -214,7 +216,8 @@ export class Game {
     this.frogs = new Frogs(this.scene, this.world, this.track, this.settings.frogCount);
 
     // --- caméras, entrées, interface -----------------------------------------
-    this.rig = new CameraRig(this.scene, canvas, this.track);
+    this.rig = new CameraRig(this.scene);
+    this.minimap = new MiniMap(document.getElementById("hud-map") as HTMLCanvasElement, this.track);
     this.input = new InputManager();
     this.hud = new Hud(
       {
@@ -248,7 +251,6 @@ export class Game {
     const onResize = (): void => {
       this.engine.resize();
       this.applyResolution();
-      this.rig.resize();
     };
     const onVisibility = (): void => {
       if (document.hidden && this.race.phase === "racing") this.pause();
@@ -267,7 +269,7 @@ export class Game {
       window.removeEventListener("keydown", onWake);
       canvas.removeEventListener("webglcontextlost", onContextLost);
     });
-    this.rig.applyTo(this.scene, false);
+    this.rig.applyTo(this.scene);
   }
 
   /** Position sur la grille : juste avant la ligne d'arrivée. */
@@ -305,7 +307,6 @@ export class Game {
       if (this.input.padReady) this.hud.navigate(frame);
       if (frame.pause) this.hud.goBack();
       this.menuCamera(dt);
-      this.syncMap(false);
     } else {
       if (frame.pause) this.pause();
       else if (frame.resetCar) this.recover();
@@ -316,22 +317,21 @@ export class Game {
         this.trafficCollide();
         this.coneCollide();
         this.frogCollide(dt);
-        this.rig.update(this.car, dt, { mapVisible: true });
+        this.rig.update(this.car, dt);
+        this.minimap.update(
+          this.car.renderPos,
+          this.car.renderHeading,
+          clamp(this.lastS / this.track.totalLength, 0, 1),
+          this.race.lap,
+          this.race.totalLaps,
+        );
       }
-      this.syncMap(this.hud.screen === "game");
     }
 
     this.updateVisuals(dt);
     this.updateAudioState();
     this.updateHud(frame);
     this.scene.render();
-  }
-
-  /** Affiche ou masque le mini-circuit (rendu en surimpression). */
-  private syncMap(visible: boolean): void {
-    if (visible === this.mapVisible) return;
-    this.mapVisible = visible;
-    this.rig.applyTo(this.scene, visible);
   }
 
   // -------------------------------------------------------------------- conduite
@@ -358,6 +358,7 @@ export class Game {
       const here = this.track.query(this.car.position.x, this.car.position.z, this.car.heading, this.hint);
       this.hint = here.index;
       this.race.update(PHYS_STEP, here.s, !here.offTrack);
+      this.lastS = here.s;
 
       if (this.car.readout.impact > 0.02) sfxCrash(this.car.readout.impact);
       const slip = this.car.skidIntensity;
@@ -386,6 +387,7 @@ export class Game {
     const s = wrap01((here.s + 8) / length) * length;
     this.car.placeAt(this.track.positionAt(s, 0, this.focusPoint), this.track.headingAt(s));
     this.hint = this.track.query(this.car.position.x, this.car.position.z, this.car.heading, here.index).index;
+    this.lastS = s;
     this.accumulator = 0;
   }
 
@@ -421,13 +423,12 @@ export class Game {
 
   /**
    * Bascule poursuite / cockpit. `toggle` ne fait que changer le mode : il faut
-   * rebrancher `scene.activeCameras` sur la scène, sinon l'image ne bouge pas
-   * (`syncMap` n'appelle `applyTo` que lorsque la visibilité du mini-circuit change).
+   * rebrancher `scene.activeCameras` sur la scène, sinon l'image ne bouge pas.
    */
   private switchCamera(): void {
     const mode = this.rig.toggle();
     this.car.setCockpitView(mode === "cockpit");
-    this.rig.applyTo(this.scene, this.mapVisible);
+    this.rig.applyTo(this.scene);
     this.hud.toast(mode === "cockpit" ? "Caméra cockpit" : "Caméra poursuite", 1100);
   }
 
@@ -610,8 +611,10 @@ export class Game {
     this.hint = this.track.query(this.car.position.x, this.car.position.z, this.car.heading, this.hint).index;
     this.prevSlip = 0;
     this.prevOnRoad = true;
+    this.lastS = 0;
     this.accumulator = 0;
     this.lastSteps = 0;
+    this.minimap.reset();
     this.copyInput(this.stepInput, NEUTRAL);
     this.copyInput(this.prevStepInput, NEUTRAL);
   }

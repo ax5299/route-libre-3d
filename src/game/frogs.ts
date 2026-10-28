@@ -101,21 +101,19 @@ export class Frogs {
     }
   }
 
-  /** Modèle ~1 m : corps bombé, tête, yeux globuleux, pattes repliées. */
+  /** Modèle ~1 m : corps et tête en ellipsoïdes bombés, yeux globuleux, pattes repliées. */
   private buildSource(): Mesh | null {
     const b = new FacetBuilder();
-    b.place(null).box({ w: 0.62, h: 0.3, d: 0.9, y: 0.22 }, PALETTE.frogGreen);
-    b.place(null).box({ w: 0.5, h: 0.2, d: 0.7, y: 0.36 }, PALETTE.frogGreen.scale(1.14));
-    b.place({ position: { x: 0, y: 0.24, z: 0.52 } }).box({ w: 0.46, h: 0.2, d: 0.26 }, PALETTE.frogGreen.scale(0.9));
-    for (const x of [-0.16, 0.16]) {
-      b.place({ position: { x, y: 0.4, z: 0.56 } }).prism({ radius: 0.09, height: 0.1, segments: 6 }, PALETTE.frogEye);
-      b.place({ position: { x, y: 0.5, z: 0.56 } }).prism({ radius: 0.05, height: 0.05, segments: 6 }, PALETTE.frogDark);
+    const G = PALETTE.frogGreen;
+    b.place({ position: { x: 0, y: 0.27, z: -0.04 } }).ellipsoid({ rx: 0.33, ry: 0.22, rz: 0.5, segments: 14, rings: 8 }, G);
+    b.place({ position: { x: 0, y: 0.3, z: 0.46 } }).ellipsoid({ rx: 0.23, ry: 0.17, rz: 0.24, segments: 12, rings: 7 }, G.scale(1.08));
+    for (const x of [-0.14, 0.14]) {
+      b.place({ position: { x, y: 0.45, z: 0.5 } }).ellipsoid({ rx: 0.085, ry: 0.085, rz: 0.085, segments: 10, rings: 6 }, PALETTE.frogEye);
+      b.place({ position: { x, y: 0.47, z: 0.575 } }).ellipsoid({ rx: 0.045, ry: 0.05, rz: 0.03, segments: 8, rings: 5 }, PALETTE.frogDark);
     }
-    for (const x of [-0.34, 0.34]) {
-      b.place({ position: { x, y: 0.08, z: 0.3 } }).box({ w: 0.16, h: 0.16, d: 0.34 }, PALETTE.frogDark);
-    }
-    for (const x of [-0.4, 0.4]) {
-      b.place({ position: { x, y: 0.17, z: -0.26 } }).box({ w: 0.2, h: 0.32, d: 0.42 }, PALETTE.frogDark);
+    for (const x of [-0.28, 0.28]) {
+      b.place({ position: { x, y: 0.1, z: 0.26 } }).ellipsoid({ rx: 0.08, ry: 0.09, rz: 0.16, segments: 8, rings: 5 }, PALETTE.frogDark);
+      b.place({ position: { x: x * 1.25, y: 0.19, z: -0.3 } }).ellipsoid({ rx: 0.11, ry: 0.15, rz: 0.24, segments: 10, rings: 6 }, PALETTE.frogDark.scale(1.15));
     }
     return b.toMesh(this.scene, "frog");
   }

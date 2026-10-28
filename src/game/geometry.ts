@@ -163,9 +163,44 @@ export class FacetBuilder {
     return this;
   }
 
+  /**
+   * Ellipsoïde centré sur l'origine du placement (corps de grenouille,
+   * rochers, ballons). Teinte par facette : dessus éclairé, dessous sombre.
+   */
+  ellipsoid(opts: { rx: number; ry: number; rz: number; segments: number; rings: number }, color: Color3): this {
+    const { rx, ry, rz, segments, rings } = opts;
+    const at = (t: number, a: number): Vec3 => ({
+      x: Math.cos(a) * rx * Math.cos(t),
+      y: ry * Math.sin(t),
+      z: Math.sin(a) * rz * Math.cos(t),
+    });
+    const tint = (t: number, a: number): Color3 => {
+      const ny = Math.sin(t);
+      const lit = 0.7 + 0.55 * Math.max(0, ny) + 0.16 * Math.max(0, Math.cos(a)) + 0.06 * Math.max(0, Math.sin(a));
+      return color.scale(lit);
+    };
+    for (let i = 0; i < rings; i++) {
+      const t0 = -Math.PI / 2 + (i / rings) * Math.PI;
+      const t1 = -Math.PI / 2 + ((i + 1) / rings) * Math.PI;
+      for (let j = 0; j < segments; j++) {
+        const a1 = (j / segments) * Math.PI * 2;
+        const a2 = ((j + 1) / segments) * Math.PI * 2;
+        this.quad(at(t0, a2), at(t0, a1), at(t1, a1), at(t1, a2), tint((t0 + t1) / 2, (a1 + a2) / 2));
+      }
+    }
+    const north: Vec3 = { x: 0, y: ry, z: 0 };
+    const south: Vec3 = { x: 0, y: -ry, z: 0 };
+    for (let j = 0; j < segments; j++) {
+      const a1 = (j / segments) * Math.PI * 2;
+      const a2 = ((j + 1) / segments) * Math.PI * 2;
+      this.tri(at(Math.PI / 2 - Math.PI / rings, a2), at(Math.PI / 2 - Math.PI / rings, a1), north, tint(1, (a1 + a2) / 2));
+      this.tri(at(-Math.PI / 2 + Math.PI / rings, a1), at(-Math.PI / 2 + Math.PI / rings, a2), south, tint(-1, (a1 + a2) / 2));
+    }
+    return this;
+  }
+
   /** Prisme à n côtés : base en y = 0, plafond en y = height. */
-  prism(
-    opts: { radius: number; height: number; segments: number; topRadius?: number },
+  prism(    opts: { radius: number; height: number; segments: number; topRadius?: number },
     color: Color3,
   ): this {
     const { radius, height, segments } = opts;

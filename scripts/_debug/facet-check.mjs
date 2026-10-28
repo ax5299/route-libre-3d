@@ -86,8 +86,9 @@ const result = await (async () => {
   const box = probe((fb, c) => fb.box({ w: 3, h: 3, d: 3 }, c), "boite");
   const cone = probe((fb, c) => fb.cone({ radius: 2, height: 3, segments: 12 }, c, c), "cone");
   const disc = probe((fb, c) => fb.disc({ rx: 2, ry: 1, segments: 16 }, c, c), "disque");
+  const ell = probe((fb, c) => fb.ellipsoid({ rx: 2, ry: 1.5, rz: 2, segments: 14, rings: 8 }, c), "ellipsoide");
   scene.clearColor.set(prevClear.r, prevClear.g, prevClear.b, prevClear.a);
-  return { prism, box, cone, disc };
+  return { prism, box, cone, disc, ell };
   });
 })();
 

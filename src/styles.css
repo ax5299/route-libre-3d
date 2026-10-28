@@ -72,6 +72,20 @@ body {
   flex-wrap: wrap;
 }
 
+.hud-map {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: min(30vw, 330px);
+  height: min(17vw, 186px);
+  min-width: 180px;
+  min-height: 104px;
+  background: rgba(9, 12, 20, 0.82);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
 .chip {
   background: var(--panel);
   border: 1px solid var(--line);
