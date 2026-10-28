@@ -253,24 +253,32 @@ export class Track {
     }
     if (bestD > 3600) {
       // fenêtre insuffisante (téléportation, réinitialisation) : recherche globale
-      bestD = Infinity;
-      for (let i = 0; i < m; i += this.stride) {
-        const smp = this.samples[i];
-        const d = (smp.x - x) ** 2 + (smp.z - z) ** 2;
-        if (d < bestD) {
-          bestD = d;
-          best = i;
-        }
+      best = this.globalIndex(x, z);
+    }
+    return best;
+  }
+
+  /** Index de l'échantillon le plus proche sur tout le circuit (grossier puis fin). */
+  private globalIndex(x: number, z: number): number {
+    const m = this.samples.length;
+    let best = 0;
+    let bestD = Infinity;
+    for (let i = 0; i < m; i += this.stride) {
+      const smp = this.samples[i];
+      const d = (smp.x - x) ** 2 + (smp.z - z) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        best = i;
       }
-      const coarse = best;
-      for (let k = -this.stride; k <= this.stride; k++) {
-        const i = (coarse + k + m) % m;
-        const smp = this.samples[i];
-        const d = (smp.x - x) ** 2 + (smp.z - z) ** 2;
-        if (d < bestD) {
-          bestD = d;
-          best = i;
-        }
+    }
+    const coarse = best;
+    for (let k = -this.stride; k <= this.stride; k++) {
+      const i = (coarse + k + m) % m;
+      const smp = this.samples[i];
+      const d = (smp.x - x) ** 2 + (smp.z - z) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        best = i;
       }
     }
     return best;
@@ -869,6 +877,8 @@ export class Track {
       const side = rnd() < 0.5 ? -1 : 1;
       const lat = (17 + rnd() * 95) * side;
       const p = this.positionAt(s, lat);
+      // dans les virages serrés, l'offset normal peut retomber sur la chaussée
+      if (Math.abs(this.distanceToTrack(p.x, p.z).lateral) < 14) continue;
       const yaw = rnd() * Math.PI * 2;
       const roll = rnd();
       if (roll < 0.42) push(firSpots, p.x, p.z, 0.75 + rnd() * 0.75, yaw);
