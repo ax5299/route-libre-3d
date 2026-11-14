@@ -374,7 +374,7 @@ export class Game {
       this.prevOnRoad = !here.offTrack;
     }
     if (steps === MAX_STEPS) this.accumulator = 0; // pas de dette de simulation
-    this.car.blendRender(clamp(this.accumulator / PHYS_STEP, 0, 1));
+    this.car.blendRender(clamp(this.accumulator / PHYS_STEP, 0, 1), PHYS_STEP);
     this.lastSteps = steps;
     this.copyInput(this.prevStepInput, this.stepInput);
   }

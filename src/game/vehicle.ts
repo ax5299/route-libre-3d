@@ -91,14 +91,14 @@ export class Car {
   private contact = false;
   private brakeGlow = 0;
   private tailMat: StandardMaterial | null = null;
-  private prevX = 0;
   private prevY = 0;
-  private prevZ = 0;
   private prevHeading = 0;
   /** Intensité du nid de poule sous la voiture à l'image précédente. */
   private prevHole = 0;
   /** Temps restant de glisse forcée après un nid moyen ou gros. */
   private skidTime = 0;
+  /** Position physique réelle (pas fixes). Distincte de la position dessinée. */
+  private readonly physPos = new Vector3();
   /** Position/cap interpolés entre le dernier pas physique et la prochaine image. */
   readonly renderPos = new Vector3();
   renderHeading = 0;
@@ -454,6 +454,7 @@ export class Car {
 
   /** Repositionne la voiture (grille de départ, téléportation après sortie). */
   placeAt(position: Vector3, heading: number): void {
+    this.physPos.copyFrom(position);
     this.root.position.copyFrom(position);
     this.heading = shortestAngle(heading);
     this.velocity.setAll(0);
@@ -473,9 +474,7 @@ export class Car {
     this.prevHole = 0;
     this.skidTime = 0;
     this.hint = 0;
-    this.prevX = position.x;
     this.prevY = position.y;
-    this.prevZ = position.z;
     this.prevHeading = this.heading;
     this.renderPos.copyFrom(position);
     this.renderHeading = this.heading;
@@ -483,23 +482,32 @@ export class Car {
   }
 
   /**
-   * Interpole la position de rendu entre le pas physique précédent et le
-   * suivant (`alpha` = reste de l'accumulateur / pas) : sans ça, la caméra suit
-   * des positions discrètes à 120 Hz et le décor tremble sur les écrans dont le
-   * rafraîchissement n'est pas un multiple exact du pas.
+   * Extrapole la position de rendu depuis le dernier pas physique avec le reste
+   * d'accumulateur (`alpha` = reste / pas, `step` = durée d'un pas) : sans ça,
+   * la caméra suit des positions discrètes à 120 Hz et le décor tremble sur les
+   * écrans dont le rafraîchissement n'est pas un multiple exact du pas.
    */
-  blendRender(alpha: number): void {
-    const pos = this.root.position;
+  blendRender(alpha: number, step: number): void {
+    const pos = this.physPos;
+    const ahead = alpha * step;
+    // On extrapole depuis le dernier pas physique avec la vitesse courante,
+    // plutôt que d'interpoler entre les deux derniers pas (ce qui rendrait la
+    // caisse un pas en retard). `alpha` = reste de l'accumulateur / pas.
     this.renderPos.set(
-      this.prevX + (pos.x - this.prevX) * alpha,
-      this.prevY + (pos.y - this.prevY) * alpha,
-      this.prevZ + (pos.z - this.prevZ) * alpha,
+      pos.x + this.velocity.x * ahead,
+      pos.y + (pos.y - this.prevY) * alpha,
+      pos.z + this.velocity.z * ahead,
     );
-    this.renderHeading = this.prevHeading + shortestAngle(this.heading - this.prevHeading) * alpha;
+    this.renderHeading = this.heading + shortestAngle(this.heading - this.prevHeading) * alpha;
+    // Le maillage doit lire la même position/cap interpolés que la caméra de
+    // poursuite. Sinon, à une fréquence d'écran non alignée sur le pas physique
+    // de 120 Hz, la caisse saute d'un pas à l'autre dans l'image → clignotement.
+    this.root.position.copyFrom(this.renderPos);
+    this.root.rotation.y = Math.PI / 2 - this.renderHeading;
   }
 
   get position(): Vector3 {
-    return this.root.position;
+    return this.physPos;
   }
 
   /** Vitesse signée le long de l'axe de la voiture. */
@@ -532,7 +540,7 @@ export class Car {
    * hors du rayon et signale un impact. Renvoie true si collision.
    */
   collideWith(px: number, pz: number, radius: number): boolean {
-    const pos = this.root.position;
+    const pos = this.physPos;
     let dx = pos.x - px;
     let dz = pos.z - pz;
     let d = Math.hypot(dx, dz);
@@ -553,6 +561,13 @@ export class Car {
     this.velocity.z *= 0.7;
     pos.x = px + nx * radius;
     pos.z = pz + nz * radius;
+    // La position physique vient de changer hors du pas de simulation : recaler
+    // aussi le rendu pour que la caisse et la caméra ne prennent pas un pas de retard.
+    this.prevY = pos.y;
+    this.renderPos.copyFrom(pos);
+    this.renderHeading = this.heading;
+    this.root.position.copyFrom(pos);
+    this.root.rotation.y = Math.PI / 2 - this.heading;
     this.impact = Math.max(this.impact, clamp(Math.abs(into) / 12 + 0.15, 0, 1));
     this.readout.impact = this.impact;
     const fx = Math.cos(this.heading);
@@ -576,6 +591,8 @@ export class Car {
     this.velocity.x += -fz * side * kick;
     this.velocity.z += fx * side * kick;
     this.heading = shortestAngle(this.heading + side * severity * 0.16);
+    this.renderHeading = this.heading;
+    this.root.rotation.y = Math.PI / 2 - this.heading;
     this.skidTime = Math.max(this.skidTime, 0.9);
     this.impact = Math.max(this.impact, 0.9);
     this.readout.impact = this.impact;
@@ -585,10 +602,8 @@ export class Car {
   }
 
   update(dt: number, input: VehicleInput, track: Track): void {
-    const pos = this.root.position;
-    this.prevX = pos.x;
+    const pos = this.physPos;
     this.prevY = pos.y;
-    this.prevZ = pos.z;
     this.prevHeading = this.heading;
     const near = track.query(pos.x, pos.z, this.heading, this.hint);
     this.hint = near.index;
