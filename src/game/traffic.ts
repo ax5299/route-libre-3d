@@ -26,6 +26,8 @@ export interface Runner {
   /** Vitesse de croisière visée (m/s). */
   cruise: number;
   speed: number;
+  /** Fondu anti-occlusion caméra (1 = opaque). */
+  fade: number;
 }
 
 /**
@@ -71,6 +73,7 @@ export class Traffic {
       lateral: lane,
       cruise: 9 + Math.random() * 5,
       speed: 0,
+      fade: 1,
     };
     runner.speed = runner.cruise;
     this.place(runner);

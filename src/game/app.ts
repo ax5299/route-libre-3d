@@ -53,7 +53,7 @@ import {
 import { CIRCUITS, Track } from "./track";
 import { Traffic } from "./traffic";
 import { Car, type VehicleInput } from "./vehicle";
-import { clamp, formatLapTime, wrap01 } from "./utils";
+import { clamp, damp, formatLapTime, wrap01 } from "./utils";
 
 /** Pas de simulation fixe : 120 Hz, indépendant de la fréquence d'affichage. */
 const PHYS_STEP = 1 / 120;
@@ -324,6 +324,7 @@ export class Game {
         this.coneCollide();
         this.frogCollide(dt);
         this.rig.update(this.car, dt);
+        this.updateOcclusion(dt);
         this.minimap.update(
           this.car.renderPos,
           this.car.renderHeading,
@@ -377,6 +378,45 @@ export class Game {
     this.car.blendRender(clamp(this.accumulator / PHYS_STEP, 0, 1), PHYS_STEP);
     this.lastSteps = steps;
     this.copyInput(this.prevStepInput, this.stepInput);
+  }
+
+  /**
+   * Fondu des voitures de trafic qui s'intercalent entre la caméra de poursuite
+   * et la caisse du joueur. À haute vitesse, un véhicule doublé passe très près
+   * de la caméra ; sans ce fondu, son maillage masque la voiture du joueur le
+   * temps d'un instant (superposition d'images). On ne touche au trafic qu'en
+   * vue poursuite, et uniquement sur le segment caméra→voiture.
+   */
+  private updateOcclusion(dt: number): void {
+    const chase = this.rig.mode === "chase";
+    const eye = this.rig.chase.position;
+    const car = this.car.renderPos;
+    const dirX = car.x - eye.x;
+    const dirZ = car.z - eye.z;
+    const len2 = dirX * dirX + dirZ * dirZ || 1;
+    for (const runner of this.traffic.list) {
+      let target = 1;
+      if (chase) {
+        const p = runner.car.renderPos;
+        // Paramètre de projection du véhicule sur le segment caméra→voiture.
+        const t = ((p.x - eye.x) * dirX + (p.z - eye.z) * dirZ) / len2;
+        if (t > 0.08 && t < 0.98) {
+          const nx = eye.x + dirX * t;
+          const nz = eye.z + dirZ * t;
+          const lateral = Math.hypot(p.x - nx, p.z - nz);
+          // Rayon d'emprise d'une voiture (~1,6 m) + marge de la caisse (1 m).
+          if (lateral < 2.7) target = 0.18;
+        }
+      }
+      const next = damp(runner.fade, target, target < runner.fade ? 18 : 7, dt);
+      if (Math.abs(next - runner.fade) > 0.004) {
+        runner.fade = next;
+        runner.car.setOcclusionFade(next);
+      } else if (runner.fade !== target) {
+        runner.fade = target;
+        runner.car.setOcclusionFade(target);
+      }
+    }
   }
 
   private copyInput(target: VehicleInput, source: VehicleInput): void {

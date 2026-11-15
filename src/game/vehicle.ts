@@ -70,6 +70,8 @@ export class Car {
   private readonly bodyNode: TransformNode;
   private readonly meshes: Mesh[] = [];
   private readonly materials: StandardMaterial[] = [];
+  /** Alpha de base de chaque matériau (verre ~0,42) pour le fondu d'occlusion. */
+  private readonly baseAlpha = new Map<StandardMaterial, number>();
   private readonly hubs: TransformNode[] = [];
   private readonly wheels: Mesh[] = [];
   private roofTop: Mesh | null = null;
@@ -134,6 +136,7 @@ export class Car {
     material.specularColor = new Color3(0.02 + gloss, 0.02 + gloss, 0.02 + gloss);
     material.specularPower = 42;
     if (opts.alpha !== undefined) material.alpha = opts.alpha;
+    this.baseAlpha.set(material, material.alpha);
     this.materials.push(material);
     return material;
   }
@@ -504,6 +507,19 @@ export class Car {
     // de 120 Hz, la caisse saute d'un pas à l'autre dans l'image → clignotement.
     this.root.position.copyFrom(this.renderPos);
     this.root.rotation.y = Math.PI / 2 - this.renderHeading;
+  }
+
+  /**
+   * Rend la voiture semi-transparente (fondu anti-occlusion) quand elle se
+   * intercale entre la caméra de poursuite et le joueur. 1 = opaque (normal),
+   * 0 = invisible. Chaque matériau retrouve son alpha d'origine (verre ~0,42).
+   */
+  setOcclusionFade(alpha: number): void {
+    const k = clamp(alpha, 0, 1);
+    for (const material of this.materials) {
+      const base = this.baseAlpha.get(material) ?? material.alpha;
+      material.alpha = base * k;
+    }
   }
 
   get position(): Vector3 {
